@@ -1,0 +1,159 @@
+{
+  "app_name": "Promobeaux",
+  "personality": "4 Tactile / Playful LIGHT",
+  "personality_one_liner": "A friendly, welcoming, and tactile experience that makes finding grocery deals feel rewarding and effortless.",
+  "color": {
+    "surface": "#FAFAF7",
+    "onSurface": "#1A1D1A",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#1A1D1A",
+    "surfaceTertiary": "#F2F2ED",
+    "onSurfaceTertiary": "#1A1D1A",
+    "surfaceInverse": "#1A1D1A",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#059669",
+    "brandPrimary": "#059669",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#047857",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#D1FAE5",
+    "onBrandTertiary": "#065F46",
+    "success": "#10B981",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F59E0B",
+    "onWarning": "#FFFFFF",
+    "error": "#EF4444",
+    "onError": "#FFFFFF",
+    "info": "#3B82F6",
+    "onInfo": "#FFFFFF",
+    "border": "#E5E7EB",
+    "borderStrong": "#9CA3AF",
+    "divider": "#E5E7EB",
+    "muted": "#6B7280",
+    "onBrand": "#FFFFFF"
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use generous tactile padding. Cards shouldn't feel cramped.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 2,
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use on sticky primary CTA button backgrounds at the bottom",
+      "Use on bottom tab bar",
+      "Use on floating action buttons (FAB)"
+    ],
+    "dont's": [
+      "Do not use on regular cards or list items",
+      "Do not use on form inputs"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Onboarding",
+      "purpose": "Capture ZIP code and 2-4 preferred stores to personalize deals.",
+      "states": {
+        "loading": "Centered spinner",
+        "empty": "N/A",
+        "error": "Error message with retry button"
+      },
+      "layout": "Large welcoming headline. ZIP code input with large touch target. A masonry or flex-wrap grid of store choice chips (brandTertiary bg when selected). Sticky CTA at the bottom."
+    },
+    {
+      "name": "Watchlist",
+      "purpose": "Allow users to add their regular grocery items to track price drops.",
+      "states": {
+        "loading": "Skeleton list of items",
+        "empty": "Playful illustration of empty shopping basket + 'Add your first item' button.",
+        "error": "Error message with retry"
+      },
+      "layout": "Single column list of cards. Each card shows item name, size, and usual price. A sticky FAB for 'Add Item' (barcode scan or manual type)."
+    },
+    {
+      "name": "Deals Feed (Home)",
+      "purpose": "Showcase deals scored 10%+ off or BOGO, grouped by store.",
+      "states": {
+        "loading": "Skeleton masonry grid",
+        "empty": "Playful illustration 'No deals today, check back tomorrow!'",
+        "error": "Error loading deals with retry"
+      },
+      "layout": "Pinterest-style 2-column masonry grid for deal cards. Each card has an image, bright discount badge (brand primary), product name, and store logo/initials. Filter tabs at the top for stores."
+    },
+    {
+      "name": "Savings Summary",
+      "purpose": "Highlight total potential savings this week with a large hero number.",
+      "states": {
+        "loading": "Spinner",
+        "empty": "Start adding to your watchlist to see savings.",
+        "error": "Error fetching savings"
+      },
+      "layout": "Large hero typography for '$X Weekly Savings'. Confetti or playful background shapes. A 'Check deals now' sticky button."
+    }
+  ],
+  "images": {
+    "hero_groceries": {
+      "url": "https://images.unsplash.com/photo-1628102491629-778571d893a3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODF8MHwxfHNlYXJjaHwxfHxmcmVzaCUyMGdyb2NlcmllcyUyMG1hcmtldHxlbnwwfHx8fDE3OTI4ODQ2OTV8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Fresh groceries in a market"
+    },
+    "empty_aisle": {
+      "url": "https://images.pexels.com/photos/15491784/pexels-photo-15491784.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Clean grocery store aisle for empty state"
+    },
+    "store_walmart": {
+      "url": "https://images.unsplash.com/photo-1648091855110-77a1c3dead63?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwxfHwlMjJ3YWxtYXJ0JTIwbG9nbyUyMHBuZyUyMnxlbnwwfHx8fDE3OTI4ODQ2OTV8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Walmart"
+    },
+    "store_aldi": {
+      "url": "https://images.pexels.com/photos/33810488/pexels-photo-33810488.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Aldi"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Use Personality 4 (Tactile / Playful LIGHT). Elements should have soft rounding (radius lg to pill), and the UI should feel welcoming and touchable.",
+    "BANNED COLORS: Blue, Purple, Indigo. We are using an Emerald Green (`#059669`) as the primary brand color to represent fresh savings and money.",
+    "For store logos (Kroger, Target, H-E-B) where we couldn't fetch real PNGs, use the initial fallback pattern: a circle with the brandTertiary background and the first letter of the store in the center.",
+    "Implement a Pinterest-style 2-column masonry grid for the Deals Feed. Deal cards should emphasize the discount badge.",
+    "Make the Savings Summary screen impactful with oversized typography for the total savings number.",
+    "Use sticky buttons (e.g., 'Check deals now') at the bottom of scrollable screens, housed in a glassmorphism container if over scrolling content.",
+    "Typography: Use Plus Jakarta Sans exclusively, capped at 500 weight. Use size to establish hierarchy instead of bold weights.",
+    "Haptics: Add subtle haptics to the '+' add button in the Watchlist and when toggling store chips in onboarding."
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "summary": "Retested the iteration_1 fixes on the backend (pytest, 48 tests: 46 pass, 2 fail on precision gaps that were found and documented as known gaps) and on the frontend (Playwright at 375x667, demo flow end to end). Working: matcher rejects all 4 listed false positives and accepts true matches; removing a store deletes that store's deals in the API; deals header total equals the Savings total ($9.04 / $9.04); a live check replaced the sample Target coffee deal with a live Kroger deal; register-push returns 201 {status: skipped}; each demo login creates a separate seeded demo_<hex> user with isolated data; 'On sale' tag stays on one line (17px tall); trash button is 44x44; onboarding edits survive a focus refetch; add/edit/delete, check deals now and exit demo all work. Broken: (a) the Savings tab shows stale data after editing stores, (b) the web focus outline is still visible on the price input, (c) store tiles have no aria-checked on web, (d) snippets are still cut mid-word at the end of the match window, (e) name words are matched as substrings, so 'Eggshell paint' matches unbranded 'Large Eggs'. No deprecated Expo packages detected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "score_result/_windows (deal engine)", "issue": "Name and brand words are matched with substring `t in win_low` and the anchor regex has a leading \\b only. Unbranded 'Large Eggs' matches 'Eggshell paint $3.49'. Use \\b...\\b word-boundary regexes. Reference: /app/backend/server.py:368-374"},
+      {"endpoint": "score_result (deal engine)", "issue": "With a brand set, one name word is enough: 'Tyson Chicken Nuggets $7.99' is accepted for 'Tyson Boneless Chicken Breast'. This matches the spec but is a precision gap. Consider requiring all distinctive name words when the item has 2+ of them. Reference: /app/backend/server.py:371-372"},
+      {"endpoint": "_clean_snippet / _windows", "issue": "The match window is a fixed slice (anchor-25 .. anchor+80), so snippets start and end mid-word. Live example: 'oz 17) Folgers or Café Bustelo Coffee – $9.99 with card Select Varieties, 22-25.9 oz Can, Lim'. Word-boundary trimming only runs when the snippet is over 200 chars. Trim both ends of the window to whitespace. Reference: /app/backend/server.py:369,380-386"},
+      {"endpoint": "POST /api/auth/demo", "issue": "Each call creates a new user plus 6 items, 4 deals and 1 alert. Nothing ever removes them and the endpoint has no rate limit, so the database grows without bound, and each demo session can trigger paid Exa searches via /deals/check. Add a TTL index (or periodic cleanup) for is_demo data and a rate limit."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Savings tab after editing stores", "issue": "onboarding save() only invalidates ['deals']. If the Savings tab was already visited, it keeps showing removed-store savings: after removing Target it still showed the $9.04 total and a Target $3.00 row. Add qc.invalidateQueries for 'savings' (and 'alerts'). Reference: /app/frontend/app/onboarding.tsx:52", "testID": "savings-total", "priority": "MEDIUM"},
+      {"component": "Add item price input (web)", "issue": "A black focus rectangle is still drawn when the input is focused. outlineWidth: 0 does not suppress Chrome's 'outline-style: auto' ring (computed 'auto 0px'); use outlineStyle: 'none'. The input also runs past its container (x 62 + width 311 = 373 vs a card edge of about 351), so the ring overflows to the screen edge. Reference: /app/frontend/app/add-item.tsx:117", "testID": "add-item-price-input", "priority": "LOW"},
+      {"component": "Onboarding store tiles (web)", "issue": "role='checkbox' renders, but aria-checked is absent on web (accessibilityState is not mapped by react-native-web). Also pass aria-checked={on} (and aria-disabled) through PressScale. Reference: /app/frontend/src/components/ui.tsx:35", "testID": "store-option-kroger", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Add item", "issues": ["The in-app alert banner ('Cheerios is BOGO at Walmart') shown right after demo login covers the 'Add an item' title and close button for several seconds"]},
+      {"screen": "Watchlist", "issues": ["The long name 'Laundry Detergent Pacs' is cut to 'Laundry Deter…' when the On sale tag is shown", "The trash button deletes immediately with no confirmation or undo"]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_promobeaux_api.py", "/app/backend/tests/test_iteration2_fixes.py", "/app/backend/tests/test_live_check_replace.py", "/app/test_reports/pytest/pytest_iter2.xml"],
+  "action_items": [
+    "onboarding.tsx save(): also invalidate the 'savings' and 'alerts' queries so the Savings tab updates after stores are removed",
+    "add-item.tsx priceInput: use outlineStyle: 'none' on web and keep the input inside its container (minWidth: 0 / width constraint)",
+    "server.py _windows: use word-boundary regex matching for name and brand terms (fixes 'eggshell' matching 'eggs')",
+    "server.py: trim snippet window start and end to word boundaries",
+    "Optional: require all distinctive name words even when a brand is present; add TTL cleanup and a rate limit for demo users",
+    "PressScale: pass aria-checked / aria-disabled for web accessibility"
+  ],
+  "critical_code_review_comments": [
+    "The 2 failing tests in test_iteration2_fixes.py::TestMatcherGaps are intentional regression markers for the precision gaps above; they should pass once fixed",
+    "On the backend, the live check correctly deletes sample deals only when live deals are found for that item, and keeps previous deals when the Exa search errors",
+    "FastAPI on_event is deprecated; move to lifespan handlers (non-blocking)"
+  ],
+  "updated_files": ["/app/backend/tests/test_promobeaux_api.py (user_id now asserted as a demo_ prefix; the deals-shape test uses a fresh demo session because the onboarding test now deletes removed-store deals)", "/app/backend/tests/test_iteration2_fixes.py (new)", "/app/backend/tests/test_live_check_replace.py (new)"],
+  "success_rate": {"backend": "96% (46/48; the 2 failures are newly found precision gaps)", "frontend": "~85% (all flows work; Savings stale after a store edit, price outline still visible, aria-checked missing on web)"},
+  "seed_data_creation": "No manual seeding. Each test or UI run creates throwaway demo_<hex> users via POST /api/auth/demo. TEST_ items were deleted.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Demo users are per session (demo_<hex>); do not assume a 'demo_user' id. backend/pytest.ini enables xdist (-n); run with '-n 0' for sequential runs. The live Exa check returns in about 0.5s and found a Kroger Folgers deal. Tab testIDs: tab-deals, tab-watchlist, tab-savings, tab-profile.",
+  "rca_of_issue": "Stale Savings: tabs stay mounted and react-query only refetches invalidated or remounted queries; onboarding invalidates 'deals' but not 'savings'. Price outline: RN-web sets outline-style:auto on focused inputs, and Chrome draws the auto ring regardless of outline-width:0; outline-style:none is required."
+}

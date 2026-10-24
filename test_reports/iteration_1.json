@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 1: backend 27/27 pytest pass (demo auth, 401 guards, me/onboarding validation, watchlist CRUD+validation+owner 404s, barcode lookup, live Exa deal check, deals/savings/alerts). Frontend (390x844 web preview) all requested flows work: sign-in, Explore the demo -> Deals masonry with store chips + filtering, Check deals now loading -> in-app banner, Watchlist add/edit/delete via FAB/modal, Savings total + per-store breakdown, Profile edit stores (onboarding?edit=1, 4-store cap, continue disabled <2 stores / bad ZIP, returns to profile), scan permission screen -> type instead, Exit demo -> sign-in (persists across reload). Main problems are deal-quality and data consistency: the live Exa scoring produces false-positive deals (prices taken from other products), deals from removed stores remain, and Deals header total does not match Savings total. No deprecated Expo packages found (expo-camera, expo-notifications used).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/deals/check (score_result/search_item)", "issue": "False-positive deals from keyword windows on generic words. Seen live: 'Large Eggs' $1.99 at Kroger from a snippet about 'Pepperidge Goldfish Crackers ... $1.99 / Kellogg's Large Size Cereal' (matched 'large'); 'Ground Coffee' $5.99 from 'Kroger 80% Lean Ground Beef $5.99' (matched 'ground'); 'Boneless Chicken Breast' $7.99 from 'Boneless Chuck Roast'; 'Cheerios' BOGO at Kroger with only a generic 'cereal ... clip digital' snippet; Walmart Tide $6.97 'cashback' from generic article text. This inflates savings ($23.06) and alerts users with wrong deals. Fix: require the full item name (or most of its tokens, and brand when given) inside the window, use a stopword list for generic words (large, ground, boneless, whole, organic, ...), and only take prices close to the matched phrase.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "PUT /api/me/onboarding", "issue": "When stores change, existing deals (live + is_sample) for removed stores are kept. Verified: after switching to Kroger+Aldi, Deals 'All' still showed Walmart/Target cards and Savings still counted them. Delete deals for stores not in the new list, or filter GET /deals and /savings by user.stores."},
+      {"endpoint": "POST /api/deals/check", "issue": "Sample deals (is_sample) stay next to live deals for the same item/store (e.g., Kroger Large Eggs sample $3.49 and live $1.99). Think about clearing samples after the first real check."},
+      {"endpoint": "POST /api/register-push", "issue": "Returns 500 because EMERGENT_PUSH_KEY is 'placeholder' in backend/.env. This is expected in preview, but native push registration will fail until a real key is set."},
+      {"endpoint": "demo user", "issue": "Every demo session shares the single demo_user document, so any visitor's edits (watchlist, stores) show up for all demo visitors."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Deals header total vs Savings", "issue": "Deals header 'deals-total-savings' adds up every deal row, including duplicates for the same item across stores and samples, giving $39.50. Savings uses the best deal per item and shows $23.06. The two numbers on one screen pair contradict each other. Use the same per-item-best logic, or label it differently.", "affected_testIDs": ["deals-total-savings", "savings-total"]}
+    ],
+    "design_issues": [
+      {"screen": "Watchlist", "issues": ["The 'On sale' pill wraps to 2 lines ('On / sale') next to long item names (Laundry Detergent Pacs, Boneless Chicken). Add numberOfLines={1}/flexShrink:0 to the pill.", "Trash icon hit area is 28x28 (hitSlop 8 helps on native). The visual target is under 44pt."]},
+      {"screen": "Add item (web)", "issue_note": "", "issues": ["The usual-price TextInput shows the browser's black focus outline, which overflows the rounded price container on web. Set outlineStyle:'none' on web."]},
+      {"screen": "Onboarding", "issues": ["Store tiles expose no accessibilityState selected/checked (aria-selected null), which is an a11y gap.", "useEffect resets zip/stores whenever me.data refetches (e.g., window refocus), which can wipe in-progress edits."]},
+      {"screen": "Deals", "issues": ["Deal card promo_text shows raw mid-word Exa snippets (e.g., 'epperidge Goldfish...', 'cy here. Walmart has...'), which looks broken. Trim to word boundaries."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_promobeaux_api.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "HIGH: Tighten score_result/_relevant in server.py so deals match the actual product (full name/brand tokens, generic-word stopwords, prices next to the phrase). Current live results attach other products' prices to watchlist items.",
+    "Remove or filter deals for stores the user deselected in PUT /api/me/onboarding (or filter /deals and /savings by user.stores).",
+    "Make the Deals header total match the Savings total (best deal per item), or relabel it.",
+    "Fix the 'On sale' pill wrapping in watchlist.tsx and enlarge the trash touch target to 44pt.",
+    "Trim Exa promo_text snippets to word boundaries.",
+    "Optional: per-visitor demo users. Set a real EMERGENT_PUSH_KEY for native push."
+  ],
+  "critical_code_review_comments": [
+    "server.py score_result: keywords = 4+ letter words from the name only (brand ignored), so 'large', 'ground', 'boneless' match unrelated products. _relevant also passes on any 3+ letter word from name or brand.",
+    "server.py run_check: the BOGO fallback sets sale=usual/2 whenever 'buy' appears in the window, even with no evidence the item itself is BOGO.",
+    "server.py daily_check: users are processed one after another with up to 25 Exa calls each. Fine for now, but it won't scale.",
+    "Uses deprecated @app.on_event startup/shutdown. Consider a lifespan handler.",
+    "onboarding.tsx edit mode uses router.back(). If /onboarding?edit=1 is opened directly (web refresh), there is no history to go back to."
+  ],
+  "updated_files": ["/app/backend/tests/test_promobeaux_api.py"],
+  "success_rate": {"backend": "100% (27/27 API tests); deal-scoring accuracy poor", "frontend": "~95% of requested flows pass; issues are data consistency and design"},
+  "seed_data_creation": "None. TEST_ watchlist items were created and deleted. Demo stores were temporarily changed and restored to 75201 / Kroger, Walmart, Target. Demo watchlist is back to the 6 seeded items.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_promobeaux_api.py (pytest.ini enables xdist; use -n 0 to see prints). Writing files under /app/backend triggers a uvicorn reload. The live Exa check finished in about 0.5s and returned checked=6, found=7. Verify the deal relevance fix by inspecting the promo_text of each non-sample deal from GET /api/deals.",
+  "rca_of_issue": "False deals: score_result builds windows around any 4+ letter token of item.name, then picks the minimum $ price in the 40-95% range of usual_price inside those windows. Weekly-ad roundup pages list many products, so generic tokens land next to other products' prices. Stale store deals: PUT /me/onboarding updates the user only and never touches the deals collection."
+}
