@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { Plus, Trash } from "phosphor-react-native";
+import { Plus, ShoppingBag, Trash } from "phosphor-react-native";
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from "react-native";
 import Animated, { FadeInDown, LinearTransition } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -55,20 +55,29 @@ export default function WatchlistScreen() {
   const renderItem = ({ item, index }: { item: Item; index: number }) => (
     <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 50)} layout={LinearTransition}>
       <PressScale testID={`watchlist-item-${item.id}`} onPress={() => edit(item)} style={styles.card}>
+        <View style={styles.thumb}>
+          {item.image_url ? (
+            <Image testID={`watchlist-image-${item.id}`} source={{ uri: item.image_url }} style={styles.thumbImg} contentFit="contain" transition={250} accessibilityLabel={item.name} />
+          ) : item.image_checked ? (
+            <ShoppingBag size={24} color={colors.muted} />
+          ) : (
+            <ActivityIndicator size="small" color={colors.muted} />
+          )}
+        </View>
         <View style={styles.cardMain}>
+          <Txt medium style={styles.name} numberOfLines={2}>{item.name}</Txt>
           <View style={styles.nameRow}>
-            <Txt medium style={styles.name} numberOfLines={1}>{item.name}</Txt>
             {onSale.has(item.id) && <Txt medium style={styles.saleTag}>On sale</Txt>}
+            <Txt style={[styles.meta, styles.metaText]} numberOfLines={1}>{[item.brand, item.size].filter(Boolean).join(" · ") || "Any brand"}</Txt>
           </View>
-          <Txt style={styles.meta} numberOfLines={1}>{[item.brand, item.size].filter(Boolean).join(" · ") || "Any brand"}</Txt>
         </View>
         <View style={styles.priceCol}>
           <Txt style={styles.usualLabel}>Usually</Txt>
           <Txt medium style={styles.price}>{money(item.usual_price)}</Txt>
+          <Pressable testID={`watchlist-delete-${item.id}`} onPress={() => remove(item)} accessibilityLabel={`Remove ${item.name}`} style={styles.trash} hitSlop={4}>
+            <Trash size={20} color={colors.muted} />
+          </Pressable>
         </View>
-        <Pressable testID={`watchlist-delete-${item.id}`} onPress={() => remove(item)} accessibilityLabel={`Remove ${item.name}`} style={styles.trash}>
-          <Trash size={20} color={colors.muted} />
-        </Pressable>
       </PressScale>
     </Animated.View>
   );
@@ -92,7 +101,7 @@ export default function WatchlistScreen() {
           data={list.data}
           keyExtractor={(i) => i.id}
           renderItem={renderItem}
-          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: bottomChrome + 104 }}
+          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: bottomChrome + 120 }}
           refreshControl={<RefreshControl refreshing={list.isRefetching} onRefresh={() => list.refetch()} tintColor={colors.brandPrimary} />}
           ListEmptyComponent={
             <View style={styles.empty} testID="watchlist-empty">
@@ -123,7 +132,7 @@ const useStyles = makeStyles((c) => ({
   title: { fontSize: 26, letterSpacing: -0.5 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.lg, padding: spacing.xl },
   card: {
-    flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, minHeight: 76,
+    flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, paddingLeft: spacing.md, paddingRight: spacing.lg, minHeight: 88,
     backgroundColor: c.surfaceSecondary, borderRadius: radius.lg, borderWidth: 1, borderColor: c.border,
   },
   cardMain: { flex: 1, gap: 2 },
@@ -131,10 +140,16 @@ const useStyles = makeStyles((c) => ({
   name: { fontSize: 16, flexShrink: 1 },
   saleTag: { flexShrink: 0, fontSize: 11, color: c.onBrandTertiary, backgroundColor: c.brandTertiary, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.pill, overflow: "hidden" },
   meta: { fontSize: 13, color: c.muted },
+  metaText: { flexShrink: 1 },
   priceCol: { alignItems: "flex-end" },
   usualLabel: { fontSize: 11, color: c.muted },
   price: { fontSize: 18 },
-  trash: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -spacing.sm },
+  trash: { width: 44, height: 40, alignItems: "flex-end", justifyContent: "center", marginBottom: -spacing.sm },
+  thumb: {
+    width: 64, height: 64, borderRadius: radius.md, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
+    padding: spacing.xs, alignItems: "center", justifyContent: "center", overflow: "hidden",
+  },
+  thumbImg: { width: "100%", height: "100%" },
   fab: {
     position: "absolute", right: spacing.lg, width: 60, height: 60, borderRadius: 30, backgroundColor: c.brandPrimary,
     alignItems: "center", justifyContent: "center",

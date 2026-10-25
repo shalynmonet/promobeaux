@@ -1,0 +1,53 @@
+{
+  "summary": "Tested the store-picker fix (1..7 stores) and the watchlist card redesign (photo thumbnail, trash icon below the 'Usually' price). Backend: 14/15 new iteration-6 tests pass. PUT /api/me/onboarding saves all 7 stores and single stores (Aldi, H-E-B, Tom Thumb), returns 422 for 0 or 8 stores and 400 for unknown stores, and deals from removed stores are dropped. GET /api/watchlist returns image_url and image_checked. The background lookup marks every item as checked, POST sets image_checked=false, PUT resets the image, and delete/restore keeps image_url. One failure: duplicate stores are saved as-is. Regression: 110 of 112 pass. I updated 2 old tests that assumed 2-4 stores. test_check_live gave one 502 in the parallel run and passed on rerun (flaky). Frontend at 390x844 in demo mode: Profile > Stores & ZIP shows 3/7, then tapping Aldi, H-E-B, Tom Thumb and Sprouts all check (count 4/7 to 7/7). Save stores returns to Profile, which shows all 7 chips. Deselecting all gives 0/7 with Save disabled; 1 store (Tom Thumb) saves, and Deals shows only the Tom Thumb chip. Watchlist cards: 64x64 thumbnail on the left (spinner while pending, then a photo or a bag icon), 'Usually' and the price on the right, and a 44x40 trash icon below the price inside the card on all 6 cards. Tapping trash removes the item without opening edit; Undo restores it; tapping the card opens /add-item with the item's values. Main finding: the product-photo lookup is unreliable because Open Food Facts search often returns 503. Only 0-2 of 6 demo items got a photo per fresh demo user, and a failed lookup is saved permanently as 'no photo'. No deprecated Expo packages found (expo-av, expo-barcode-scanner, expo-background-fetch not in package.json).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "lookup_product_image / fill_images (server.py:351-383)", "issue": "Open Food Facts cgi/search.pl often returns HTTP 503 'Service Temporarily Unavailable' (rate limit; backend log has 133 'Image lookup failed ... Expecting value' lines). The code calls r.json() without checking the status, and the except branch saves image_url=None, image_checked=True, so a temporary outage becomes a permanent bag icon (the only retry is editing the item). Each new demo user also repeats the same 6 lookups, which makes the rate limiting worse. Seen: run 1 got 2/6 photos (Cheerios, Milk); a later demo session got 0/6, Cheerios included.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "PUT /api/me/onboarding", "issue": "Duplicate stores are accepted and saved: {stores:['Aldi','Aldi']} returns 200 with stores ['Aldi','Aldi']. Also ['Kroger'] x7 passes max_length=7. The UI can't send duplicates, but the API should de-duplicate or reject them."},
+      {"endpoint": "POST /api/deals/check (test_check_live)", "issue": "Flaky: one 502 during the parallel pytest run; passed on rerun (0.7 s, 200). Probably upstream or ingress under load."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Watchlist photo thumbnails", "issue": "Most cards show the bag fallback instead of a photo because of the backend lookup issue above (OFF 503s saved as permanent 'no photo'). The UI itself (spinner, then image or bag) works.", "affected_testIDs": ["watchlist-image-<id>"]}
+    ],
+    "design_issues": [
+      {"screen": "Watchlist", "issues": [
+        "The 'On sale' pill plus the price column leaves little room for the name: 'Laundry Dete…' and 'Boneless Chicken Brea…' are cut off at 390 px. Consider moving the 'On sale' tag to the meta line or under the name.",
+        "Before scrolling, the FAB (60x60, bottom-right) covers the trash icon of the last visible card (Large Eggs at 390x844). The 104 px bottom padding fixes it after scrolling, so this is minor."
+      ]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration6_stores_watchlist_photos.py",
+    "/app/test_reports/pytest/iteration6_new.xml",
+    "/app/test_reports/pytest/iteration6_regression.xml"
+  ],
+  "action_items": [
+    "Make the photo lookup handle failures: check r.status_code (and content-type) before r.json(). On 5xx or 429 or a network error, leave image_checked=False (or store image_retry_at with backoff) instead of saving a permanent 'no photo'. Only set image_checked=True with image_url=None when OFF actually returned no match.",
+    "Cache photo lookups across users (e.g. a db.product_images collection keyed by barcode or a normalised 'brand name' string), and/or seed the 6 demo items with image_url or barcodes. This stops every new demo user making 6 rate-limited OFF search calls, and space the calls out (OFF search allows about 10 requests/min).",
+    "De-duplicate stores in OnboardingIn (e.g. a validator returning list(dict.fromkeys(stores))), or return 422 for duplicates.",
+    "Optional: move the 'On sale' pill so names aren't cut off; keep the FAB from covering the last card's trash icon."
+  ],
+  "critical_code_review_comments": [
+    "server.py:356/363: r.json() runs without a status check, so a 503 HTML page raises JSONDecodeError, which the except treats as 'no photo'.",
+    "server.py:381: the except branch saves a permanent negative result; this should only happen when no match was found.",
+    "server.py:152: max_length=len(STORES) is correct, but there is no uniqueness check.",
+    "Frontend refetchInterval 5 s while any item is unchecked (api.ts:66) is fine, and it stops once everything is checked."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_promobeaux_api.py (422 cases now [] and 8 stores; me check now allows 1..7 stores)",
+    "/app/backend/tests/test_iteration3_stores_weekly_ads.py (count_enforced now [] and 8 stores)",
+    "/app/backend/tests/test_iteration6_stores_watchlist_photos.py (new)"
+  ],
+  "success_rate": {"backend": "98% (124/127 incl. new; 1 real minor failure on duplicate stores, 1 flaky 502)", "frontend": "100% of tested flows work; photo coverage poor because of the backend lookup issue"},
+  "seed_data_creation": "Only fresh demo users (POST /api/auth/demo). The TEST_Nutella item was created and deleted.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Demo login lands on the Deals tab. Tab testIDs: tab-deals, tab-watchlist, tab-savings, tab-profile. The store picker is /onboarding?edit=1 from profile-edit-stores-button. Open Food Facts search is rate limited (503s), so photo results vary between runs; check backend.err.log for 'Image lookup failed'. Run pytest with -n 0 for live-check tests to avoid flaky 502s.",
+  "rca_of_issue": "Missing photos: OFF /cgi/search.pl returns 503 under rate limiting. lookup_product_image calls r.json() on the HTML 503 body, which raises JSONDecodeError. fill_images catches it and saves image_checked=True with image_url=None, so the app shows the bag icon permanently. Reproduce: create 2-3 demo users quickly, wait 20 s, and GET /api/watchlist: most items have image_checked=true and image_url=null, and the log shows 503s. Fix: status-aware handling with retry/backoff, plus a cross-user cache."
+}

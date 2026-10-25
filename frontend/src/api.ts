@@ -4,7 +4,10 @@ import { useCallback } from "react";
 import { BACKEND_URL, useSession } from "@/src/auth";
 
 export type User = { user_id: string; is_demo: boolean; zip: string; stores: string[]; onboarded: boolean; last_checked_at?: string | null };
-export type Item = { id: string; name: string; brand: string; size: string; usual_price: number; barcode: string };
+export type Item = {
+  id: string; name: string; brand: string; size: string; usual_price: number; barcode: string;
+  image_url?: string | null; image_checked?: boolean;
+};
 export type Deal = {
   id: string; item_id: string; item_name: string; brand: string; size: string; store: string;
   usual_price: number; sale_price: number; savings: number; pct_off: number;
@@ -20,7 +23,7 @@ export type Savings = {
 };
 export type AlertItem = { id: string; title: string; message: string; read: boolean; created_at: string };
 export type CheckResult = { checked: number; found: number; new_alerts: number };
-export type ItemInput = Omit<Item, "id">;
+export type ItemInput = Omit<Item, "id" | "image_url" | "image_checked">;
 
 export function useApi() {
   const { getToken } = useSession();
@@ -52,7 +55,17 @@ function useAuthedQuery<T>(key: string, path: string, refetchInterval?: number) 
 }
 
 export const useMe = () => useAuthedQuery<User>("me", "/me");
-export const useWatchlist = () => useAuthedQuery<Item[]>("watchlist", "/watchlist");
+export const useWatchlist = () => {
+  const api = useApi();
+  const { signedIn } = useSession();
+  return useQuery({
+    queryKey: ["watchlist"],
+    queryFn: () => api<Item[]>("/watchlist"),
+    enabled: signedIn,
+    // Poll briefly while product photos are still being looked up in the background.
+    refetchInterval: (q) => (q.state.data?.some((i) => !i.image_checked) ? 5000 : false),
+  });
+};
 export const useDeals = () => {
   const api = useApi();
   const { signedIn } = useSession();

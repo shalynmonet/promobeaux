@@ -38,10 +38,10 @@ export default function Onboarding() {
 
   const toggle = (s: string) => {
     haptic();
-    setStores((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : cur.length >= 4 ? cur : [...cur, s]));
+    setStores((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
   };
 
-  const valid = /^\d{5}$/.test(zip) && stores.length >= 2 && stores.length <= 4;
+  const valid = /^\d{5}$/.test(zip) && stores.length >= 1;
 
   const save = async () => {
     setError("");
@@ -83,8 +83,8 @@ export default function Onboarding() {
         />
 
         <View style={styles.labelRow}>
-          <Txt medium style={styles.label}>Pick 2–4 stores</Txt>
-          <Txt testID="onboarding-store-count" style={styles.count}>{stores.length}/4</Txt>
+          <Txt medium style={styles.label}>Pick your stores</Txt>
+          <Txt testID="onboarding-store-count" style={styles.count}>{stores.length}/{STORES.length}</Txt>
         </View>
         <View style={styles.grid}>
           {STORES.map((s) => {

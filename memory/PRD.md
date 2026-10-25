@@ -1,7 +1,7 @@
 # Promobeaux — PRD
 
 ## Original problem statement
-Mobile app for budget-conscious grocery shoppers that alerts them when the groceries they buy regularly go on sale at nearby stores. Flow: Clerk sign-in (email + Google) → onboarding (ZIP + 2–4 stores: Kroger, Walmart, Target, Aldi, H-E-B, Tom Thumb) → watchlist (barcode scan or typed; name/brand/size/usual price) → Exa-powered deal search → scoring (real deal = 10%+ off, or BOGO/coupon/cashback) → alerts → deals feed grouped by store with savings → Savings screen "You could save $X this week" → "Check deals now". Clean, friendly, light design with one bold accent color, built for one-handed use.
+Mobile app for budget-conscious grocery shoppers that alerts them when the groceries they buy regularly go on sale at nearby stores. Flow: Clerk sign-in (email + Google) → onboarding (ZIP + 1–7 stores: Kroger, Walmart, Target, Aldi, H-E-B, Tom Thumb, Sprouts) → watchlist (barcode scan or typed; name/brand/size/usual price) → Exa-powered deal search → scoring (real deal = 10%+ off, or BOGO/coupon/cashback) → alerts → deals feed grouped by store with savings → Savings screen "You could save $X this week" → "Check deals now". Clean, friendly, light design with one bold accent color, built for one-handed use.
 
 ## User choices
 Clerk keys provided · Exa key provided · push + in-app banners · daily check scheduled inside the backend · one-tap demo mode with no sign-in.
@@ -54,3 +54,9 @@ Clerk keys provided · Exa key provided · push + in-app banners · daily check 
 - P1: Price history per item; shopping list for the best store this week.
 - P2: Push only works on a published native build; Android needs google-services.json.
 - P2: Share savings card.
+
+
+## Update (Jun 2026)
+- Store picker: removed 4-store cap; pick 1–7 stores (backend validates + dedupes).
+- Watchlist cards: 64px product photo thumbnail on left, trash icon below 'Usually' price, On sale pill on brand row.
+- Photo lookup: retries on Open Food Facts 429/5xx/timeouts (4 attempts), shared photo_cache across users, 'no photo' expires after 7 days.

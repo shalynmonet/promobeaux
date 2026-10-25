@@ -1,0 +1,42 @@
+{
+  "summary": "Retested the iteration-6 fixes. BACKEND: 9/9 new tests pass (test_iteration7_photo_cache_dedupe.py). PUT /api/me/onboarding de-duplicates stores: ['Aldi','Aldi'] saves ['Aldi'], order is kept for ['Tom Thumb','Aldi','Tom Thumb','H-E-B','Aldi'], all 7 stores still save, ['Kroger']x8 returns 422 and an unknown store returns 400. Photos: a fresh demo user gets all 6 items checked, 5/6 with photos (all 5 food items; Tide Pods has no OFF match, which is expected). A second demo user reuses db.photo_cache, finishes in under 20 s, and gets identical URLs. Fresh-lookup path verified by deleting the Cheerios and Milk cache entries: Whole Milk got an OFF 503 on attempt 1, was left unchecked, retried and got its photo; both cache entries were rebuilt with URLs, all checked in 12.7 s. Retry cap verified on TEST_Nutella (search busy on 4 attempts, then given up as checked/no photo without caching). PUT resets image_url/image_checked. Regression: 120/120 pass (excluding flaky check_live). FRONTEND (390x844, demo): Watchlist shows 6 cards with 5 real product thumbnails and a bag icon for Tide. Names are no longer cut off ('Laundry Detergent Pacs' and 'Boneless Chicken Breast' wrap to 2 lines; scrollWidth equals offsetWidth). The 'On sale' pill is now on the brand/size row. After scrolling to the bottom, the last card's trash (y=615-655) no longer overlaps the FAB (y=704). Trash removes the item without navigating, the banner reads 'Removed … Changed your mind? Undo', and Undo restores it (6 cards, plus a '… is back on your list' banner). Store picker: 3/7 to 7/7 by tapping Aldi, H-E-B, Tom Thumb and Sprouts; Save returns to Profile showing all 7 chips. No deprecated Expo packages.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "fill_images (server.py:414-416)", "issue": "Non-HTTP failures (e.g. httpx.ReadTimeout/ConnectError; the log shows 'Image lookup failed for TEST_Nutella Hazelnut Spread: ' with an empty message, which is typical of a timeout) still go to the generic except branch and save a permanent 'no photo' for that item. They should be treated like PhotoServiceBusy (retry with attempts). They are not cached, so other users are unaffected."},
+      {"endpoint": "db.photo_cache", "issue": "Negative results (url=None) are cached forever with no TTL, so a product OFF couldn't match is never retried for any user. Consider expiring negative entries (e.g. 7 days) using the existing 'at' field."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Watchlist", "issues": [
+        "Before scrolling, the FAB (60x60 at y=704) still covers the trash icon of the last visible card (Large Eggs) at 390x844. It's fine after scrolling thanks to the 120 px bottom padding. Minor and unchanged.",
+        "With the 'On sale' pill on the meta row, longer brand/size text is now cut off ('Folgers Classic R…', \"Eggland's Best · 12 …\"). This is an acceptable trade-off, but the meta could wrap or the pill could go on its own line."
+      ]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration7_photo_cache_dedupe.py",
+    "/app/test_reports/pytest/iteration7_new.xml",
+    "/app/test_reports/pytest/iteration7_regression.xml"
+  ],
+  "action_items": [
+    "Optional: in fill_images, treat httpx.TimeoutException / httpx.TransportError as PhotoServiceBusy (retry) instead of saving a permanent 'no photo'.",
+    "Optional: add a TTL to negative photo_cache entries (url=None).",
+    "Optional: keep the FAB from covering the last visible card's trash icon before scrolling, and consider letting the brand/size meta wrap when the 'On sale' pill is shown."
+  ],
+  "critical_code_review_comments": [
+    "server.py:271: dedupe runs after Pydantic max_length, so 8 entries with duplicates return 422. That's acceptable because the UI can't send duplicates.",
+    "server.py:409-412: in the busy path, `continue` plus sleep(5*attempts) runs inside the same job, so with many busy items one job can take a while. This is OK because there is one job per user (_image_jobs) and the frontend polls to re-trigger it.",
+    "The photo_cache key mixes barcode and 'brand name' strings in one namespace. Collisions are unlikely, so this is fine."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration7_photo_cache_dedupe.py (new)"],
+  "success_rate": {"backend": "100% (9/9 new, 120/120 regression excluding check_live)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "Fresh demo users only. The TEST_Nutella item was created and deleted. I temporarily deleted the Cheerios/Milk photo_cache entries (rebuilt with URLs) and removed the 'nutella test_nutella hazelnut spread' cache entry.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "photo_cache is warm for the 6 demo items (5 URLs, Tide=None). To exercise the live OFF path, delete cache entries first (keys are lowercase 'brand name'). OFF search.pl still returns 503 frequently; check backend.err.log for 'Photo service busy'. Run check_live with -n 0."
+}

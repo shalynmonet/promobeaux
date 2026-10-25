@@ -149,7 +149,7 @@ class Alert(BaseDocument):
 
 class OnboardingIn(BaseModel):
     zip: str = Field(pattern=r"^\d{5}$")
-    stores: List[str] = Field(min_length=2, max_length=4)
+    stores: List[str] = Field(min_length=1, max_length=len(STORES))
 
 
 class ItemIn(BaseModel):
@@ -268,6 +268,7 @@ async def me(user: User = Depends(current_user)):
 
 @api.put("/me/onboarding")
 async def onboarding(body: OnboardingIn, user: User = Depends(current_user)):
+    body.stores = list(dict.fromkeys(body.stores))  # drop duplicates, keep order
     bad = [s for s in body.stores if s not in STORES]
     if bad:
         raise HTTPException(400, f"Unknown stores: {bad}")
@@ -283,6 +284,8 @@ async def onboarding(body: OnboardingIn, user: User = Depends(current_user)):
 @api.get("/watchlist")
 async def get_watchlist(user: User = Depends(current_user)):
     docs = await db.items.find({"user_id": user.user_id}).sort("created_at", -1).to_list(200)
+    if any(not d.get("image_checked") for d in docs):
+        schedule_image_fill(user.user_id)
     return [Item.from_mongo(d).model_dump() for d in docs]
 
 
@@ -304,7 +307,7 @@ def _oid(item_id: str) -> ObjectId:
 @api.put("/watchlist/{item_id}")
 async def update_item(item_id: str, body: ItemIn, user: User = Depends(current_user)):
     res = await db.items.update_one({"_id": _oid(item_id), "user_id": user.user_id},
-                                    {"$set": {**body.model_dump(), "image_url": None, "image_checked": False}})
+                                    {"$set": {**body.model_dump(), "image_url": None, "image_checked": False, "image_attempts": 0}})
     if not res.matched_count:
         raise HTTPException(404, "Item not found")
     schedule_image_fill(user.user_id)
@@ -346,19 +349,38 @@ async def restore_item(item_id: str, user: User = Depends(current_user)):
 _image_jobs: set = set()
 
 
+class PhotoServiceBusy(Exception):
+    """Open Food Facts is rate limiting / down — try again later instead of saving 'no photo'."""
+
+
+def _photo_key(item: Item) -> str:
+    return item.barcode or re.sub(r"\s+", " ", f"{item.brand} {item.name}".lower()).strip()
+
+
+async def _off_get(c: httpx.AsyncClient, url: str, params: dict) -> dict:
+    r = await c.get(url, params=params)
+    if r.status_code == 429 or r.status_code >= 500:
+        raise PhotoServiceBusy(f"HTTP {r.status_code}")
+    if r.status_code == 404:
+        return {}
+    r.raise_for_status()
+    return r.json() or {}
+
+
 async def lookup_product_image(item: Item) -> Optional[str]:
     async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": "Promobeaux/1.0"}) as c:
         if item.barcode:
-            r = await c.get(f"https://world.openfoodfacts.org/api/v2/product/{item.barcode}.json",
-                            params={"fields": "image_front_small_url"})
-            url = ((r.json() or {}).get("product") or {}).get("image_front_small_url")
+            data = await _off_get(c, f"https://world.openfoodfacts.org/api/v2/product/{item.barcode}.json",
+                                  {"fields": "image_front_small_url"})
+            url = (data.get("product") or {}).get("image_front_small_url")
             if url:
                 return url
-        r = await c.get("https://world.openfoodfacts.org/cgi/search.pl", params={
+        data = await _off_get(c, "https://world.openfoodfacts.org/cgi/search.pl", {
             "search_terms": f"{item.brand} {item.name}".strip(), "search_simple": 1, "action": "process",
             "json": 1, "page_size": 8, "fields": "product_name,brands,image_front_small_url"})
+        r_products = data.get("products", [])
         terms = _terms(item.name, 3) + _terms(item.brand, 3)[:1]
-        for p in (r.json() or {}).get("products", []):
+        for p in r_products:
             url, text = p.get("image_front_small_url"), f"{p.get('product_name', '')} {p.get('brands', '')}".lower()
             # Only accept a photo whose name shares a distinctive word with the item (avoids random products).
             if url and terms and any(re.search(r"\b" + re.escape(t), text) for t in terms):
@@ -369,13 +391,31 @@ async def lookup_product_image(item: Item) -> Optional[str]:
 async def fill_images(user_id: str) -> None:
     try:
         docs = await db.items.find({"user_id": user_id, "image_checked": {"$ne": True}}).to_list(15)
-        for d in docs:
+        for i, d in enumerate(docs):
             item = Item.from_mongo(d)
-            try:
-                url = await lookup_product_image(item)
-            except Exception as e:
-                logger.info(f"Image lookup failed for {item.name}: {e}")
-                url = None  # treat as "no photo" so the app stops waiting; editing the item retries
+            key = _photo_key(item)
+            cached = await db.photo_cache.find_one({"_id": key})  # shared across users
+            if cached and not cached.get("url") and cached.get("at", "") < (datetime.now(timezone.utc) - timedelta(days=7)).isoformat():
+                cached = None  # "no photo" answers expire after a week so new database entries get picked up
+            if cached:
+                url = cached.get("url")
+            else:
+                if i:
+                    await asyncio.sleep(1.5)  # be gentle with the free photo service
+                try:
+                    url = await lookup_product_image(item)
+                    await db.photo_cache.update_one({"_id": key}, {"$set": {"url": url, "at": now_iso()}}, upsert=True)
+                except (PhotoServiceBusy, httpx.TimeoutException, httpx.TransportError) as e:
+                    attempts = d.get("image_attempts", 0) + 1
+                    logger.info(f"Photo service busy for {item.name} ({e}), attempt {attempts}")
+                    if attempts < 4:  # leave unchecked so a later visit retries
+                        await db.items.update_one({"_id": d["_id"]}, {"$set": {"image_attempts": attempts}})
+                        await asyncio.sleep(5 * attempts)
+                        continue
+                    url = None
+                except Exception as e:
+                    logger.info(f"Image lookup failed for {item.name}: {e}")
+                    url = None  # treat as "no photo" so the app stops waiting; editing the item retries
             await db.items.update_one({"_id": d["_id"]}, {"$set": {"image_url": url, "image_checked": True}})
     finally:
         _image_jobs.discard(user_id)

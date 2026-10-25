@@ -102,7 +102,7 @@ class TestStoresApi:
         u = me.get("user", me)
         assert sorted(u["stores"]) == ["Sprouts", "Tom Thumb"]
 
-    @pytest.mark.parametrize("stores", [["Sprouts"], ["Sprouts", "Tom Thumb", "Kroger", "Walmart", "Target"]])
+    @pytest.mark.parametrize("stores", [[], ["Sprouts", "Tom Thumb", "Kroger", "Walmart", "Target", "Aldi", "H-E-B", "Costco"]])
     def test_onboarding_count_enforced(self, stores):
         s = _new_session()
         r = s.put(f"{BASE_URL}/api/me/onboarding", json={"zip": "75201", "stores": stores}, timeout=20)

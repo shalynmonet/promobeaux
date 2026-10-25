@@ -58,14 +58,14 @@ class TestProfile:
         assert r.status_code == 200
         d = r.json()
         assert d["user_id"].startswith("demo_") and d["is_demo"] is True and d["onboarded"] is True
-        assert len(d["zip"]) == 5 and 2 <= len(d["stores"]) <= 4
+        assert len(d["zip"]) == 5 and 1 <= len(d["stores"]) <= 7
         assert "_id" not in d
 
     @pytest.mark.parametrize("body", [
         {"zip": "1234", "stores": ["Kroger", "Walmart"]},
         {"zip": "abcde", "stores": ["Kroger", "Walmart"]},
-        {"zip": "75201", "stores": ["Kroger"]},
-        {"zip": "75201", "stores": ["Kroger", "Walmart", "Target", "Aldi", "H-E-B"]},
+        {"zip": "75201", "stores": []},
+        {"zip": "75201", "stores": ["Kroger", "Walmart", "Target", "Aldi", "H-E-B", "Tom Thumb", "Sprouts", "Kroger"]},
     ])
     def test_onboarding_validation_422(self, s, body):
         assert s.put(f"{BASE_URL}/api/me/onboarding", json=body, timeout=15).status_code == 422
