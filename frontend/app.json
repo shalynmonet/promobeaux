@@ -17,7 +17,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#F8F8F8"
+        "backgroundColor": "#EBEAEF"
       },
       "package": "com.emergent.dealhunter.vn25gh",
       "permissions": [
