@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 3: Sprouts/Tom Thumb + weekly-ad scan + separator-aware matcher. Backend 65/66 pytest pass (full suite incl. regressions). GET /api/stores returns all 7 stores; onboarding accepts Sprouts/Tom Thumb and persists; 2-4 limit enforced (422/400). The live check runs a weekly-ad Exa search per store (looked at the live results: Sprouts and Tom Thumb each return 6 weekly-ad pages from weeklyadpro/krweeklyad etc. None of them contain the demo items, so there are 0 Sprouts/Tom Thumb deals, which is accepted). Deals carry source_kind 'weekly_ad'/'search' (live Kroger Ground Coffee $9.99 came from a weekly ad, retailshout.com). Matcher: none of the 6 separator cases ('...', '…', newline, ' | ', '•') leak into a neighbouring line; the Cheerios/Chex BOGO and Pork Loin/Tyson cases are fixed. Same-segment matches still work. The one failure is a new precision gap: the 'sprouts' alias is a plain substring, so 'Brussels sprouts' on a Walmart/Kroger page gets attributed to the Sprouts store. Frontend (375x667, demo): Profile > Stores & ZIP shows the store-option-sprouts and store-option-tomthumb tiles; selecting them and saving works (aria-checked is correct). Deals chips deals-filter-sprouts/tomthumb render and filtering works (empty state shown). The weekly-ad card shows 'Sale price · Weekly ad'. Regressions all pass: demo login, Check deals now (banner shows '2 new deals'), watchlist add (6 to 7 items), savings total $6.30 matches the Deals header. No page errors. No deprecated Expo packages found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/deals/check (_match_store / STORE_ALIASES)", "issue": "The 'sprouts' alias is a plain substring, so produce text like 'Brussels sprouts' / 'bean sprouts' on another retailer's page attributes the deal to the Sprouts store. In per-item search, _match_store also returns the first store in user.stores order whose alias appears, so an aggregator page that names several stores always goes to whichever store the user picked first. Reproduced by test_brussels_sprouts_not_store: _match_store(' https://www.walmart.com/deals walmart deals brussels sprouts $2.99 ... ', ['Sprouts','Walmart']) == 'Sprouts'."},
+      {"endpoint": "POST /api/deals/check (run_check)", "issue": "If an item's own Exa search fails (None) but the weekly-ad scans succeed, the item's existing search-sourced deals are deleted and only weekly-ad matches are kept. A transient Exa error therefore wipes good deals, which defeats the 'keep previous deals when the search failed' intent."},
+      {"endpoint": "POST /api/deals/check", "issue": "After a successful live check, the seeded is_sample deals (Kroger Eggs $1.30, Tide $2.00) stay and count toward the savings total. 'Savings $6.30' is $3.30 sample plus $3.00 real. This is existing behaviour, but users may find it misleading."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Onboarding / Deals / Savings", "issues": ["StoreAvatar shows only the first letter, so Target and Tom Thumb both render as an identical 'T' avatar. Use a distinct initial ('TT') or a per-store colour.", "Deals filter Chip height is 36px (src/components/ui.tsx chip style), below the 44pt touch target. Add hitSlop or set minHeight 44. With 4 chips, the 'Tom Thumb' chip is clipped at the right edge on 375px (scrollable, OK)."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iteration3_stores_weekly_ads.py", "/app/backend/tests/debug_weekly_ad.py", "/app/test_reports/pytest/pytest_results.xml", "/app/test_reports/pytest/pytest_iteration3.xml"],
+  "action_items": [
+    "Make store attribution precise: prefer a URL/domain match (sprouts.com, tomthumb.com, kroger.com...) first, then word-boundary text aliases. For Sprouts, require 'sprouts farmers market' / 'sprouts weekly' / 'sprouts.com', or exclude '(brussels|bean|alfalfa|broccoli) sprouts'. Rerun tests/test_iteration3_stores_weekly_ads.py::TestStoreAttribution::test_brussels_sprouts_not_store.",
+    "In run_check, when an item's own search failed (own is None), keep its previous search-sourced deals (only replace weekly_ad-sourced ones), or skip the delete for that item.",
+    "(Optional) Give Tom Thumb and Target distinguishable StoreAvatars; raise the Chip touch target to 44px."
+  ],
+  "critical_code_review_comments": [
+    "_windows separator logic is correct: low and flat are the same length (both strip apostrophes), so the indices line up. seps/seps_start are recomputed per call and scanned linearly for each anchor match. That is fine at this size, but bisect would be cleaner.",
+    "_collect builds the blob from url+title+one highlight and checks _relevant before scoring. In the weekly-ad path, stores=[store] correctly limits attribution to the scanned store.",
+    "Exa weekly-ad results sometimes include unrelated news (e.g. cw33.com 'Shipt partners with Sprouts'). The scorer filters these out; consider include_domains or a 'weekly ad' title filter to save highlight tokens.",
+    "server.py is 672 lines, close to the 700-line split threshold. Consider moving the matcher/Exa code to its own module."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration3_stores_weekly_ads.py (new)", "/app/backend/tests/debug_weekly_ad.py (new debug helper, not collected by pytest)"],
+  "success_rate": {"backend": "98.5% (65/66)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "Only per-call demo users via POST /api/auth/demo (auto-purged after 7 days); one TEST_Strawberries watchlist item added to a demo user via the UI.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run 'cd /app/backend && python -m pytest tests/' (pytest.ini uses xdist; pass -n0 with -s to see live-check output). Each demo session allows 1 check per 60s. Live Exa results for Sprouts/Tom Thumb weekly ads don't include the demo items, so 0 deals for those stores is expected. tests/debug_weekly_ad.py prints the raw weekly-ad results and matches for each store."
+}

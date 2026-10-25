@@ -32,7 +32,10 @@ function DealCard({ deal, index }: { deal: Deal; index: number }) {
           <View style={styles.badge}>
             <Txt medium testID={`deal-badge-${deal.id}`} style={styles.badgeText}>{badgeText(deal)}</Txt>
           </View>
-          <Txt style={styles.promoType}>{PROMO_LABEL[deal.promo_type]}</Txt>
+          <Txt style={styles.promoType}>
+            {PROMO_LABEL[deal.promo_type]}
+            {deal.source_kind === "weekly_ad" ? " · Weekly ad" : ""}
+          </Txt>
         </View>
         <View style={styles.cardBody}>
           <Txt medium style={styles.name} numberOfLines={2}>{deal.item_name}</Txt>

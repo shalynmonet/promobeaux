@@ -16,6 +16,13 @@ Clerk keys provided · Exa key provided · push + in-app banners · daily check 
 - All screens and flows above; separate demo user per visitor with sample data; demo deal checks limited to one per minute.
 - Tested in iterations 1 and 2 (48/48 backend tests pass; all frontend flows pass); later matcher, snippet and UI fixes were checked with pytest.
 
+## Iteration 2 (2026-10-25)
+- Added Sprouts (7 stores total; Tom Thumb already present).
+- Weekly-ad scan: one Exa search per selected store each check, scored against every watchlist item; deals tagged "Weekly ad".
+- Store attribution: page domain first, else earliest whole-word store mention; "Brussels sprouts" etc. ignored.
+- Matcher stays within a single ad line (no crossing "..." separators). Sample deals are cleared after the first real scan; an item's earlier deals are kept if only its own search fails. Two-letter store badges (TT vs T).
+- Tested in iteration 3 (66/66 backend tests pass after fixes).
+
 ## Backlog
 - P1: Confirm before deleting an item (or offer undo); stricter brand+product matching (e.g. Tyson nuggets vs breast).
 - P1: Price history per item; shopping list for the best store this week.

@@ -47,7 +47,7 @@ CLERK_ISSUER = f"https://{_clerk_frontend_api(CLERK_PUBLISHABLE_KEY)}"
 jwks_client = jwt.PyJWKClient(f"{CLERK_ISSUER}/.well-known/jwks.json", cache_keys=True)
 push_client = httpx.AsyncClient(base_url=PUSH_BASE_URL, headers={"X-Push-Key": PUSH_KEY}, timeout=10.0)
 
-STORES = ["Kroger", "Walmart", "Target", "Aldi", "H-E-B", "Tom Thumb"]
+STORES = ["Kroger", "Walmart", "Target", "Aldi", "H-E-B", "Tom Thumb", "Sprouts"]
 STORE_ALIASES = {
     "Kroger": ["kroger"],
     "Walmart": ["walmart"],
@@ -55,6 +55,7 @@ STORE_ALIASES = {
     "Aldi": ["aldi"],
     "H-E-B": ["h-e-b", "heb.com", " heb "],
     "Tom Thumb": ["tom thumb", "tomthumb"],
+    "Sprouts": ["sprouts"],
 }
 
 app = FastAPI()
@@ -125,6 +126,7 @@ class Deal(BaseDocument):
     pct_off: float
     promo_type: str  # sale | bogo | coupon | cashback
     promo_text: str = ""
+    source_kind: str = "search"  # search | weekly_ad
     source_url: str = ""
     source_title: str = ""
     is_sample: bool = False
@@ -330,11 +332,27 @@ PRICE_RE = re.compile(r"\$\s?(\d{1,3}(?:\.\d{1,2})?)")
 PCT_RE = re.compile(r"(\d{1,2})\s?%\s?off", re.I)
 
 
-def _match_store(blob: str, stores: List[str]) -> Optional[str]:
+STORE_DOMAINS = {
+    "Kroger": "kroger.com", "Walmart": "walmart.com", "Target": "target.com", "Aldi": "aldi.us",
+    "H-E-B": "heb.com", "Tom Thumb": "tomthumb.com", "Sprouts": "sprouts.com",
+}
+PRODUCE_FALSE_STORES = re.compile(r"\b(brussels?|bean|alfalfa|broccoli|pea|radish|mung)\s+sprouts\b")
+
+
+def _match_store(blob: str, stores: List[str], url: str = "") -> Optional[str]:
+    """Attribute a result to a store: the page's own domain wins, else the store named earliest in the text."""
+    host = re.sub(r"^https?://(www\.)?", "", url.lower()).split("/")[0]
     for s in stores:
-        if any(a in blob for a in STORE_ALIASES[s]):
+        if host == STORE_DOMAINS[s] or host.endswith("." + STORE_DOMAINS[s]):
             return s
-    return None
+    text = PRODUCE_FALSE_STORES.sub(" ", blob)
+    hits = []
+    for s in stores:
+        for a in STORE_ALIASES[s]:
+            m = re.search(r"(?<![a-z])" + re.escape(a.strip()) + r"(?![a-z])", text)
+            if m:
+                hits.append((m.start(), s))
+    return min(hits)[1] if hits else None
 
 
 def _relevant(item: Item, blob: str) -> bool:
@@ -368,12 +386,18 @@ def _windows(item: Item, text: str) -> List[str]:
     def has(t: str, s: str) -> bool:  # whole word, optional plural
         return re.search(r"\b" + re.escape(t) + r"s?\b", s) is not None
 
+    # Highlights glue separate ad lines with "..." / newlines; never let a window cross into a neighbour line.
+    seps = [s.end() for s in re.finditer(r"\.\.\.|…|\n|\s\|\s|•", low)]
+    seps_start = [s.start() for s in re.finditer(r"\.\.\.|…|\n|\s\|\s|•", low)]
+
     for m in re.finditer(r"\b" + re.escape(anchor) + r"s?\b", low):
-        start, end = max(0, m.start() - 25), min(len(low), m.end() + 80)
+        seg_lo = max([e for e in seps if e <= m.start()], default=0)
+        seg_hi = min([s for s in seps_start if s >= m.end()], default=len(low))
+        start, end = max(seg_lo, m.start() - 25), min(seg_hi, m.end() + 80)
         # snap to word boundaries so snippets never start or end mid-word
-        while start > 0 and not low[start - 1].isspace():
+        while start > seg_lo and not low[start - 1].isspace():
             start -= 1
-        while end < len(low) and not low[end].isspace():
+        while end < seg_hi and not low[end].isspace():
             end += 1
         win_low = low[start:end]
         if brand_terms:
@@ -443,12 +467,9 @@ def _exa_search(query: str):
     )
 
 
-async def search_item(item: Item, user: User) -> List[dict]:
-    query = (f"{item.brand} {item.name} {item.size} sale price this week weekly ad digital coupon "
-             f"at {', '.join(user.stores)} near {user.zip}").strip()
-    resp = await asyncio.to_thread(_exa_search, query)
-    best: dict = {}
-    for r in getattr(resp, "results", []) or []:
+def _collect(item: Item, results, stores: List[str], best: dict, source_kind: str) -> None:
+    """Score every highlight in a set of Exa results for one item; keep the best deal per store."""
+    for r in results or []:
         url = getattr(r, "url", "") or ""
         if not url.startswith("http"):
             continue
@@ -456,7 +477,7 @@ async def search_item(item: Item, user: User) -> List[dict]:
         highlights = getattr(r, "highlights", None) or []
         for hl in highlights or [title]:
             blob = f" {url} {title} {hl} ".lower()
-            store = _match_store(blob, user.stores)
+            store = _match_store(blob, stores, url)
             if not store or not _relevant(item, blob):
                 continue
             scored = score_result(item, f"{title} {hl}")
@@ -464,9 +485,31 @@ async def search_item(item: Item, user: User) -> List[dict]:
                 continue
             if store not in best or scored["savings"] > best[store]["savings"]:
                 snippet = scored.pop("snippet")
-                best[store] = {**scored, "store": store, "promo_text": snippet,
+                best[store] = {**scored, "store": store, "promo_text": snippet, "source_kind": source_kind,
                                "source_url": url, "source_title": title[:140]}
-    return list(best.values())
+
+
+async def search_item(item: Item, user: User) -> list:
+    query = (f"{item.brand} {item.name} {item.size} sale price this week weekly ad digital coupon "
+             f"at {', '.join(user.stores)} near {user.zip}").strip()
+    resp = await asyncio.to_thread(_exa_search, query)
+    return getattr(resp, "results", []) or []
+
+
+def _exa_weekly_ad(store: str, zip_code: str, item_names: List[str]):
+    since = (datetime.now(timezone.utc) - timedelta(days=14)).strftime("%Y-%m-%dT00:00:00.000Z")
+    return exa.search(
+        f"{store} weekly ad this week sale prices and digital coupons near {zip_code}",
+        type="auto", num_results=6, start_published_date=since,
+        contents={"highlights": {"query": f"{store} weekly ad sale prices for: {', '.join(item_names)}",
+                                 "max_characters": 3000}},
+    )
+
+
+async def search_weekly_ad(store: str, user: User, items: List[Item]) -> list:
+    names = [f"{i.brand} {i.name}".strip() for i in items][:15]
+    resp = await asyncio.to_thread(_exa_weekly_ad, store, user.zip, names)
+    return getattr(resp, "results", []) or []
 
 
 async def send_push(recipients: List[str], data: dict) -> None:
@@ -483,21 +526,43 @@ async def run_check(user: User) -> dict:
         return {"checked": 0, "found": 0, "new_alerts": 0}
     sem = asyncio.Semaphore(4)
 
-    async def one(item: Item):
+    async def guarded(label: str, coro):
         async with sem:
             try:
-                return item, await search_item(item, user)
+                return await coro
             except Exception as e:
-                logger.warning(f"Exa search failed for {item.name}: {e}")
-                return item, None
+                logger.warning(f"Exa search failed for {label}: {e}")
+                return None
 
-    results = await asyncio.gather(*(one(i) for i in items))
+    # One weekly-ad scan per store (scored against every item) + one targeted search per item.
+    ad_results, item_results = await asyncio.gather(
+        asyncio.gather(*(guarded(f"{s} weekly ad", search_weekly_ad(s, user, items)) for s in user.stores)),
+        asyncio.gather(*(guarded(i.name, search_item(i, user)) for i in items)),
+    )
+    weekly_ok = [r for r in ad_results if r is not None]
+    results = []
+    for item, own in zip(items, item_results):
+        if own is None and not weekly_ok:
+            results.append((item, None, True))
+            continue
+        best: dict = {}
+        for ads, store in zip(ad_results, user.stores):
+            if ads:
+                _collect(item, ads, [store], best, "weekly_ad")
+        _collect(item, own or [], user.stores, best, "search")
+        results.append((item, list(best.values()), own is None))
+
+    # Sample deals are only a placeholder until the first real scan succeeds.
+    if weekly_ok or any(own is not None for own in item_results):
+        await db.deals.delete_many({"user_id": user.user_id, "is_sample": True})
+
     found, new_alerts = 0, []
-    for item, deals in results:
+    for item, deals, own_failed in results:
         if deals is None:
-            continue  # keep previous deals when the search failed
-        await db.deals.delete_many({"user_id": user.user_id, "item_id": item.id,
-                                    **({} if deals else {"is_sample": False})})
+            continue  # keep previous deals when every search failed
+        # If only this item's own search failed, keep its earlier search deals and refresh weekly-ad ones.
+        scope = {"source_kind": "weekly_ad"} if own_failed else {}
+        await db.deals.delete_many({"user_id": user.user_id, "item_id": item.id, "is_sample": False, **scope})
         for d in deals:
             deal = Deal(user_id=user.user_id, item_id=item.id, item_name=item.name, brand=item.brand,
                         size=item.size, usual_price=item.usual_price, **d)

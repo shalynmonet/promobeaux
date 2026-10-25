@@ -11,7 +11,7 @@ import { useApi, useMe, User } from "@/src/api";
 import { Button, haptic, PressScale, StoreAvatar, Txt } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
-const STORES = ["Kroger", "Walmart", "Target", "Aldi", "H-E-B", "Tom Thumb"];
+const STORES = ["Kroger", "Walmart", "Target", "Aldi", "H-E-B", "Tom Thumb", "Sprouts"];
 
 export default function Onboarding() {
   const styles = useStyles();

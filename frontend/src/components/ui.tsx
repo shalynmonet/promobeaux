@@ -66,9 +66,11 @@ export function Button({ label, onPress, variant = "primary", loading, disabled,
 
 export function StoreAvatar({ store, size = 32 }: { store: string; size?: number }) {
   const styles = useStyles();
+  const words = store.split(" ").filter(Boolean);
+  const initials = words.length > 1 ? words.map((w) => w[0]).join("").slice(0, 2) : store.charAt(0);
   return (
     <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}>
-      <Txt medium style={[styles.avatarText, { fontSize: size * 0.45 }]}>{store.charAt(0)}</Txt>
+      <Txt medium style={[styles.avatarText, { fontSize: size * (initials.length > 1 ? 0.36 : 0.45) }]}>{initials}</Txt>
     </View>
   );
 }
@@ -76,7 +78,7 @@ export function StoreAvatar({ store, size = 32 }: { store: string; size?: number
 export function Chip({ label, selected, onPress, testID }: { label: string; selected: boolean; onPress: () => void; testID?: string }) {
   const styles = useStyles();
   return (
-    <Pressable testID={testID} onPress={onPress} style={[styles.chip, selected && styles.chipSelected]}>
+    <Pressable testID={testID} onPress={onPress} hitSlop={{ top: 4, bottom: 4 }} style={[styles.chip, selected && styles.chipSelected]}>
       <Txt medium style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Txt>
     </Pressable>
   );

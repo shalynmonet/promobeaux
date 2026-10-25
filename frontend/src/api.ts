@@ -9,6 +9,7 @@ export type Deal = {
   id: string; item_id: string; item_name: string; brand: string; size: string; store: string;
   usual_price: number; sale_price: number; savings: number; pct_off: number;
   promo_type: "sale" | "bogo" | "coupon" | "cashback"; promo_text: string; source_url: string; source_title: string;
+  source_kind?: "search" | "weekly_ad";
   is_sample: boolean; found_at: string;
 };
 export type Savings = {
