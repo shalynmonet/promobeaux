@@ -1,6 +1,7 @@
+import { Image } from "expo-image";
 import * as Sharing from "expo-sharing";
 import { useRouter } from "expo-router";
-import { ShareNetwork, Sparkle, X } from "phosphor-react-native";
+import { ShareNetwork, X } from "phosphor-react-native";
 import { useRef, useState } from "react";
 import { Platform, Pressable, Share, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -65,8 +66,7 @@ export default function ShareCard() {
           <View style={[styles.blob, styles.blobA]} />
           <View style={[styles.blob, styles.blobB]} />
           <View style={styles.brandRow}>
-            <View style={styles.logoDot}><Sparkle size={14} color={colors.brandPrimary} weight="fill" /></View>
-            <Txt medium style={styles.brand}>Promobeaux</Txt>
+            <Image source={require("../assets/images/brand/logo-wordmark.png")} style={styles.wordmark} contentFit="contain" />
           </View>
           <Txt style={styles.kicker}>I saved</Txt>
           <Txt medium testID="share-card-total" style={styles.amount} adjustsFontSizeToFit numberOfLines={1}>{money(total)}</Txt>
@@ -105,9 +105,9 @@ const useStyles = makeStyles((c) => ({
   blob: { position: "absolute", borderRadius: 999, backgroundColor: c.brandSecondary },
   blobA: { width: 240, height: 240, top: -90, right: -80, opacity: 0.6 },
   blobB: { width: 140, height: 140, bottom: -50, left: -40, opacity: 0.45 },
-  brandRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.lg },
-  logoDot: { width: 26, height: 26, borderRadius: 13, backgroundColor: c.onBrandPrimary, alignItems: "center", justifyContent: "center" },
-  brand: { color: c.onBrandPrimary, fontSize: 16 },
+  // Logo artwork sits on its own light background, so show it on a light pill.
+  brandRow: { alignSelf: "flex-start", backgroundColor: c.surface, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, marginBottom: spacing.lg },
+  wordmark: { width: 140, height: 51 },
   kicker: { color: c.onBrandPrimary, fontSize: 18, opacity: 0.9 },
   amount: { color: c.onBrandPrimary, fontSize: 76, lineHeight: 88, letterSpacing: -3 },
   wins: { marginTop: spacing.lg, gap: spacing.xs, backgroundColor: c.brandSecondary, borderRadius: radius.md, padding: spacing.md },

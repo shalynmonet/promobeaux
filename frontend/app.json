@@ -17,7 +17,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#F8F8F8"
       },
       "package": "com.emergent.dealhunter.vn25gh",
       "permissions": [
@@ -37,7 +37,7 @@
           "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "backgroundColor": "#F8F8F8"
         }
       ],
       "expo-font",

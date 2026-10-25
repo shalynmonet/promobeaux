@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { CaretLeft, Plus } from "phosphor-react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -38,7 +38,7 @@ export default function AdsScreen() {
   const router = useRouter();
   const banner = useBanner();
   const me = useMe();
-  const stores = me.data?.stores ?? [];
+  const stores = useMemo(() => me.data?.stores ?? [], [me.data?.stores]);
   const [store, setStore] = useState<string | undefined>(undefined);
 
   useEffect(() => {

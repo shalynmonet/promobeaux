@@ -4,7 +4,7 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Redirect, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { GoogleLogo, Sparkle } from "phosphor-react-native";
+import { GoogleLogo } from "phosphor-react-native";
 import { useState } from "react";
 import { Platform, Pressable, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
@@ -104,12 +104,13 @@ export default function SignIn() {
           <LinearGradient colors={["transparent", colors.surface]} style={styles.heroFade} />
         </View>
         <View style={styles.content}>
-          <View style={styles.logoRow}>
-            <View style={styles.logoDot}>
-              <Sparkle size={18} color={colors.onBrandPrimary} weight="fill" />
-            </View>
-            <Txt medium style={styles.logo}>Promobeaux</Txt>
-          </View>
+          <Image
+            testID="sign-in-logo"
+            source={require("../assets/images/brand/logo-wordmark.png")}
+            style={styles.wordmark}
+            contentFit="contain"
+            accessibilityLabel="Promobeaux — your grocery price tracker"
+          />
           <Txt style={styles.headline}>Never pay full price for your regulars.</Txt>
           <Txt style={styles.sub}>We watch the weekly ads at your stores and tell you when your groceries go on sale.</Txt>
 
@@ -178,9 +179,7 @@ const useStyles = makeStyles((c) => ({
   heroImg: { ...{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 } },
   heroFade: { position: "absolute", left: 0, right: 0, bottom: 0, height: 140 },
   content: { paddingHorizontal: spacing.xl, gap: spacing.md, marginTop: -spacing.xl },
-  logoRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  logoDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: c.brandPrimary, alignItems: "center", justifyContent: "center" },
-  logo: { fontSize: 20, color: c.brandSecondary },
+  wordmark: { width: 230, height: 84, marginLeft: -spacing.xs },
   headline: { fontSize: 30, lineHeight: 38, letterSpacing: -0.6 },
   sub: { fontSize: 15, lineHeight: 22, color: c.muted, marginBottom: spacing.sm },
   segment: { flexDirection: "row", backgroundColor: c.surfaceTertiary, borderRadius: radius.pill, padding: 4 },

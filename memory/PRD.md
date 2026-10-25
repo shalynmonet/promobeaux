@@ -36,6 +36,9 @@ Clerk keys provided · Exa key provided · push + in-app banners · daily check 
 - Deal cards show an expiry pill (warning color when ≤1 day) and a bell toggle; new "Ending soon" chip (≤2 days).
 - After iteration 5 testing: month names must be real words (no "Octopus"), sizes like "12 - 24 oz" are never read as dates, the current ad-week range is preferred over weekend promos, and the server sends days_left in Chicago time so pills and alerts agree. Reminders are removed with their item/store; the reminder job only checks users who set reminders. Bell moved to the card tile, pill is full width with dark text on amber. 97 backend tests pass.
 
+## Iteration 5 (2026-10-25)
+- Brand logo added: the houndstooth cart wordmark (transparent background) on the sign-in screen and the share card; the cart artwork is used for the app icon, Android icon and splash (background #F8F8F8). Source files are in assets/images/brand/.
+
 ## Backlog
 - P1: Confirm before deleting an item (or offer undo); stricter brand+product matching (e.g. Tyson nuggets vs breast).
 - P1: Price history per item; shopping list for the best store this week.
