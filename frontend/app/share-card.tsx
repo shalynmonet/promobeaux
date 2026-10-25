@@ -9,6 +9,7 @@ import { captureRef } from "react-native-view-shot";
 
 import { money, useMe, useSavings } from "@/src/api";
 import { useBanner } from "@/src/components/banner";
+import { Houndstooth } from "@/src/components/houndstooth";
 import { Button, Txt } from "@/src/components/ui";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -82,6 +83,7 @@ export default function ShareCard() {
           <Txt style={styles.footer} numberOfLines={2}>
             {s?.deal_count ?? 0} deals found at {stores.slice(0, 3).join(" · ") || "my stores"}
           </Txt>
+          <Houndstooth height={16} style={styles.band} testID="share-card-houndstooth" />
         </View>
       </View>
 
@@ -106,7 +108,7 @@ const useStyles = makeStyles((c) => ({
   blobA: { width: 240, height: 240, top: -90, right: -80, opacity: 0.6 },
   blobB: { width: 140, height: 140, bottom: -50, left: -40, opacity: 0.45 },
   // Logo artwork sits on its own light background, so show it on a light pill.
-  brandRow: { alignSelf: "flex-start", backgroundColor: c.surface, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, marginBottom: spacing.lg },
+  brandRow: { alignSelf: "center", backgroundColor: c.surface, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, marginBottom: spacing.lg },
   wordmark: { width: 140, height: 51 },
   kicker: { color: c.onBrandPrimary, fontSize: 18, opacity: 0.9 },
   amount: { color: c.onBrandPrimary, fontSize: 76, lineHeight: 88, letterSpacing: -3 },
@@ -115,6 +117,7 @@ const useStyles = makeStyles((c) => ({
   winName: { color: c.onBrandPrimary, flex: 1, fontSize: 14 },
   winAmt: { color: c.onBrandPrimary, fontSize: 14 },
   footer: { color: c.onBrandPrimary, opacity: 0.85, fontSize: 12, marginTop: spacing.md },
+  band: { marginTop: spacing.lg, marginHorizontal: -spacing.xl, marginBottom: -spacing.xl },
   actions: { paddingHorizontal: spacing.xl, gap: spacing.md },
   hint: { color: c.muted, textAlign: "center", fontSize: 13 },
 }));

@@ -5,6 +5,7 @@ import { ActivityIndicator, FlatList, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { money, TripRow, useTrip } from "@/src/api";
+import { Houndstooth } from "@/src/components/houndstooth";
 import { Button, haptic, StoreAvatar, Txt } from "@/src/components/ui";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
@@ -69,6 +70,7 @@ export default function TripScreen() {
         <Txt style={styles.headerTitle}>Best store trip</Txt>
         <View style={{ width: 44 }} />
       </View>
+      <Houndstooth height={10} />
 
       {trip.isLoading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View>
@@ -131,7 +133,7 @@ export default function TripScreen() {
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.sm, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: c.divider },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
   back: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   headerTitle: { fontSize: 18 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.lg, padding: spacing.xl },

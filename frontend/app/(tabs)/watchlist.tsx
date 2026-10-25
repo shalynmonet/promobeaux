@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Item, money, useDeals, useDeleteItem, useRestoreItem, useWatchlist } from "@/src/api";
 import { useBanner } from "@/src/components/banner";
+import { Houndstooth } from "@/src/components/houndstooth";
 import { Button, PressScale, Txt } from "@/src/components/ui";
 import { usesNativeTabs } from "@/src/navigation";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -78,6 +79,7 @@ export default function WatchlistScreen() {
         <Txt style={styles.kicker}>{list.data?.length ?? 0} items tracked</Txt>
         <Txt style={styles.title}>Your watchlist</Txt>
       </View>
+      <Houndstooth height={10} testID="watchlist-header-houndstooth" />
       {list.isLoading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View>
       ) : list.error ? (
@@ -116,7 +118,7 @@ export default function WatchlistScreen() {
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
-  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: c.divider },
+  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   kicker: { color: c.muted, fontSize: 13 },
   title: { fontSize: 26, letterSpacing: -0.5 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.lg, padding: spacing.xl },

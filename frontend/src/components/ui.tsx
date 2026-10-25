@@ -94,8 +94,8 @@ const useStyles = makeStyles((c) => ({
   ghost: { backgroundColor: "transparent", borderWidth: 1, borderColor: c.border },
   disabled: { opacity: 0.5 },
   btnLabel: { fontSize: 16 },
-  avatar: { backgroundColor: c.brandTertiary, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: c.onBrandTertiary },
+  avatar: { backgroundColor: c.surfaceInverse, alignItems: "center", justifyContent: "center" },
+  avatarText: { color: c.onSurfaceInverse },
   chip: {
     height: 36, flexShrink: 0, paddingHorizontal: spacing.lg, borderRadius: radius.pill, justifyContent: "center",
     backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border,

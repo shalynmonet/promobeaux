@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { money, useSavings, useTrip } from "@/src/api";
 import { CHECK_BAR_HEIGHT, CheckDealsBar } from "@/src/components/check-deals-bar";
+import { Houndstooth } from "@/src/components/houndstooth";
 import { Button, StoreAvatar, Txt } from "@/src/components/ui";
 import { usesNativeTabs } from "@/src/navigation";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -60,6 +61,7 @@ export default function SavingsScreen() {
                 <Txt medium style={styles.shareText}>Share my savings</Txt>
               </Pressable>
             )}
+            <Houndstooth height={12} style={styles.heroBand} testID="savings-hero-houndstooth" />
           </Animated.View>
 
           {trip.data?.store && (
@@ -130,6 +132,7 @@ const useStyles = makeStyles((c) => ({
   heroKicker: { color: c.onBrandPrimary, fontSize: 18, opacity: 0.9 },
   heroNum: { color: c.onBrandPrimary, fontSize: 80, lineHeight: 92, letterSpacing: -3 },
   heroStats: { marginTop: spacing.lg, gap: 2 },
+  heroBand: { position: "absolute", left: 0, right: 0, bottom: 0 },
   heroStat: { color: c.onBrandPrimary, opacity: 0.85, fontSize: 13 },
   shareBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, alignSelf: "flex-start", marginTop: spacing.lg, height: 44, minWidth: 180, paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: c.onBrandPrimary },
   shareText: { color: c.brandSecondary, fontSize: 14 },

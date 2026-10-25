@@ -112,7 +112,7 @@ export default function SignIn() {
             accessibilityLabel="Promobeaux — your grocery price tracker"
           />
           <Txt style={styles.headline}>Never pay full price for your regulars.</Txt>
-          <Txt style={styles.sub}>We watch the weekly ads at your stores and tell you when your groceries go on sale.</Txt>
+          <Txt style={styles.sub}>We watch deals at your favorite stores and tell you when your favorite groceries go on sale.</Txt>
 
           {!verifying ? (
             <>
@@ -179,7 +179,7 @@ const useStyles = makeStyles((c) => ({
   heroImg: { ...{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 } },
   heroFade: { position: "absolute", left: 0, right: 0, bottom: 0, height: 140 },
   content: { paddingHorizontal: spacing.xl, gap: spacing.md, marginTop: -spacing.xl },
-  wordmark: { width: 230, height: 84, marginLeft: -spacing.xs },
+  wordmark: { width: 230, height: 84, alignSelf: "center" },
   headline: { fontSize: 30, lineHeight: 38, letterSpacing: -0.6 },
   sub: { fontSize: 15, lineHeight: 22, color: c.muted, marginBottom: spacing.sm },
   segment: { flexDirection: "row", backgroundColor: c.surfaceTertiary, borderRadius: radius.pill, padding: 4 },

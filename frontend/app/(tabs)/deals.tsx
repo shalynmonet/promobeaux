@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { daysLeft, Deal, expiryLabel, money, useDeals, useMe, useToggleReminder } from "@/src/api";
 import { useBanner } from "@/src/components/banner";
 import { CHECK_BAR_HEIGHT, CheckDealsBar } from "@/src/components/check-deals-bar";
+import { Houndstooth } from "@/src/components/houndstooth";
 import { Button, Chip, haptic, PressScale, StoreAvatar, Txt } from "@/src/components/ui";
 import { usesNativeTabs } from "@/src/navigation";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -80,6 +81,7 @@ function DealCard({ deal, index }: { deal: Deal; index: number }) {
               <BellSimple size={18} color={colors.brandSecondary} />
             )}
           </Pressable>
+          <Houndstooth height={8} style={styles.tileBand} />
         </View>
         <View style={styles.cardBody}>
           <Txt medium style={styles.name} numberOfLines={2}>{deal.item_name}</Txt>
@@ -163,6 +165,7 @@ export default function DealsScreen() {
           ))}
         </ScrollView>
       </View>
+      <Houndstooth height={10} testID="deals-header-houndstooth" />
 
       {deals.isLoading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View>
@@ -204,7 +207,7 @@ export default function DealsScreen() {
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
-  header: { paddingHorizontal: spacing.lg, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.divider },
+  header: { paddingHorizontal: spacing.lg, backgroundColor: c.surface },
   kicker: { color: c.muted, fontSize: 13 },
   kickerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   adsBtn: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.pill, backgroundColor: c.brandTertiary },
@@ -223,6 +226,7 @@ const useStyles = makeStyles((c) => ({
   },
   tile: { height: 88, backgroundColor: c.brandTertiary, padding: spacing.md, justifyContent: "space-between" },
   tileTall: { height: 112 },
+  tileBand: { position: "absolute", left: 0, right: 0, bottom: 0 },
   badge: { alignSelf: "flex-start", backgroundColor: c.brandPrimary, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   badgeText: { color: c.onBrandPrimary, fontSize: 16 },
   promoType: { color: c.onBrandTertiary, fontSize: 12 },

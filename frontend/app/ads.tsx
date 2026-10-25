@@ -1,12 +1,13 @@
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { CaretLeft, Plus } from "phosphor-react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AdLine, useAds, useMe, useRefreshAds } from "@/src/api";
 import { useBanner } from "@/src/components/banner";
+import { Houndstooth } from "@/src/components/houndstooth";
 import { Button, Chip, Txt } from "@/src/components/ui";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -39,11 +40,9 @@ export default function AdsScreen() {
   const banner = useBanner();
   const me = useMe();
   const stores = useMemo(() => me.data?.stores ?? [], [me.data?.stores]);
-  const [store, setStore] = useState<string | undefined>(undefined);
-
-  useEffect(() => {
-    if (!store && stores.length) setStore(stores[0]);
-  }, [stores, store]);
+  const [picked, setStore] = useState<string | undefined>(undefined);
+  // Default to the first saved store until the shopper picks one.
+  const store = picked && stores.includes(picked) ? picked : stores[0];
 
   const ads = useAds(store);
   const refresh = useRefreshAds();
@@ -85,6 +84,7 @@ export default function AdsScreen() {
           ))}
         </ScrollView>
       </View>
+      <Houndstooth height={10} />
 
       {ads.isLoading || !store ? (
         <View style={styles.center}>
@@ -136,7 +136,7 @@ export default function AdsScreen() {
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
-  header: { paddingHorizontal: spacing.lg, borderBottomWidth: 1, borderBottomColor: c.divider, backgroundColor: c.surface },
+  header: { paddingHorizontal: spacing.lg, backgroundColor: c.surface },
   topRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   back: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginLeft: -spacing.md },
   title: { fontSize: 24, letterSpacing: -0.4 },

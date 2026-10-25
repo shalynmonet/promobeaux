@@ -39,6 +39,11 @@ Clerk keys provided · Exa key provided · push + in-app banners · daily check 
 ## Iteration 5 (2026-10-25)
 - Brand logo added: the houndstooth cart wordmark (transparent background) on the sign-in screen and the share card; the cart artwork is used for the app icon, Android icon and splash (background #F8F8F8). Source files are in assets/images/brand/.
 
+## Iteration 6 (2026-10-25)
+- Logo always centered (sign-in, share card). Sign-in tagline: "We watch deals at your favorite stores and tell you when your favorite groceries go on sale."
+- Houndstooth brand accents (src/components/houndstooth.tsx, SVG pattern from theme ink/paper colors): under the headers on Deals, Watchlist, Ads and Trip; along the bottom of deal-card tiles, the Savings hero and the share card. Store badges are now black with white letters. Green stays the action/accent color.
+- Sharp icon: waiting on a 1024px original from the user (only 350–480px screenshots uploaded).
+
 ## Backlog
 - P1: Confirm before deleting an item (or offer undo); stricter brand+product matching (e.g. Tyson nuggets vs breast).
 - P1: Price history per item; shopping list for the best store this week.
