@@ -1,0 +1,49 @@
+{
+  "summary": "Iteration 4 tested Undo Delete, Best Store Trip, the Weekly Ad Browser, the Savings Share Card, plus regression of demo login, check deals now, add item and editing stores. Backend: 38/38 tests passed (test_iteration4_undo_trip_ads.py + test_promobeaux_api.py). Testing-agent extras passed 4/4 (test_iteration4_extra.py: second delete/restore 404, deals restored, on_deal rows first, Walmart/Target ads). Frontend (375x667): every requested flow works. Undo banner restores the item and auto-hides at about 6s. Ads chips, lines, Watch -> add-item prefill and back all work. Trip shows Kroger, $3.30 saved, $51.74 total, progress 0/6 -> 2/6 -> 1/6; checks persist after navigating away and after reload; clear works. Share card total $9.04 matches savings-total; share on web shows the 'Sharing isn't available here' banner (acceptable); close works. Main data-quality bug: the Walmart weekly ad contains 18 Spanish Walmart Mexico lines priced in MXN (source informador.mx), shown to a US ZIP 75201 user. No deprecated Expo packages found (no expo-av, expo-barcode-scanner or expo-background-fetch).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/ads/Walmart", "issue": "The cached ad has 18 of 36 lines from https://www.informador.mx/... (Walmart Mexico, Spanish, MXN prices, e.g. 'Arrachera marinada de Res SuKarne a $218.00 el empaque', 'Calabaza blanca a $130.00 la pieza'). These are shown to a US user (ZIP 75201). _match_store only checks that the store name appears, not that the source is US/English.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/ads/{store}", "issue": "Empty results are cached: H-E-B|75201 and Tom Thumb|75201 have 0 lines. Because demo users always get the cached copy (even with refresh=true), they see an empty ad forever, and the ad never goes stale for demo users. Consider not caching empty results, or giving demo users a TTL such as 24h."},
+      {"endpoint": "GET /api/ads/{store}", "issue": "Article headlines and non-product promo text get through as ad lines, e.g. 'Walmart Cash Back Deals: Pasta Moneymaker, Free Dreft, $1 Pumpkin, and more!', 'Target Deals This Week: $0.49 Palmer's ...', 'Save $1 off each item WYB (5+) participating products...'."},
+      {"endpoint": "POST /api/watchlist/{id}/restore", "issue": "Edge case: if the item is deleted, a real scan then clears the demo sample deals, and the item is restored, the old is_sample deals are re-inserted. Consider dropping is_sample deals on restore when the user already has real results."},
+      {"endpoint": "GET /api/trip", "issue": "Deals from stores the user has since removed are still counted. The tie-break gives stores not in user.stores a key of 0, which beats listed stores at index 1 and above. Consider filtering to user.stores."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Ads -> Watch prefill", "issue": "guessName takes the text before the first '$', so promo lines produce bad names: 'Save $1 off each item WYB...' -> 'Save', 'Buy 2 Ortega Original Taco...' -> 'Buy 2 Ortega...'. Strip leading 'Buy N'/'Save' and skip lines whose name is shorter than 2 words.", "testID": "ad-watch-0", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Ads browser (Walmart)", "issue": "Shows MXN/Spanish Walmart Mexico items (backend issue above).", "affected_testIDs": ["ads-store-walmart", "ad-line-*"]}
+    ],
+    "design_issues": [
+      {"screen": "Savings", "issues": ["savings-share-button tap area is 57x15px with no hitSlop. Add padding or hitSlop to reach 44px."]},
+      {"screen": "Watchlist undo banner", "issues": ["in-app-banner-action (Undo) is 59x28px. Add hitSlop or raise its height to 44px."]},
+      {"screen": "Ads / Trip / Share-card (stack screens)", "issues": ["The AlertWatcher deal banner ('Cheerios is BOGO at Walmart') can appear over a stack screen's header just after login, covering the ads chips, back and close buttons for about 4.5s. Tapping where a chip is hits the banner and navigates to /deals. This is existing behaviour, but more visible now that there are more stack screens."]},
+      {"screen": "Trip", "issues": ["trip-clear-button is a small text link ('Clear checkmarks'). Consider hitSlop."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iteration4_undo_trip_ads.py", "/app/backend/tests/test_iteration4_extra.py", "/app/test_reports/pytest/pytest_iteration4.xml"],
+  "action_items": [
+    "HIGH: In weekly_ad (and the deal check, if it shares the matcher), reject non-US/non-English sources: skip TLDs like .mx/.es/.ca-fr and URLs with /es/; detect Spanish markers such as ' el kilo', ' la pieza', 'ofertas'; or pass include_domains / a US hint to Exa. Then purge ad_cache 'Walmart|75201'.",
+    "Don't cache ad results with 0 lines, or give demo users a TTL (e.g. 24h) so stale or empty ads refresh.",
+    "Filter headline/promo-only lines in _ad_lines (e.g. lines containing 'Deals This Week', 'and more!', starting with 'Save $').",
+    "Improve guessName in app/ads.tsx (strip 'Buy N'/'Save $x' prefixes).",
+    "Touch targets: add hitSlop/padding to savings-share-button, in-app-banner-action and trip-clear-button."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 819 lines (>700). Consider splitting into routers (watchlist/trash, trip, ads, scheduler).",
+    "Trip checkmark storage key 'trip_checked_<store>' is not scoped per user; stale ids collect but have no visible impact.",
+    "FastAPI on_event is deprecated (use lifespan); minor."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration4_extra.py"],
+  "success_rate": {"backend": "100% (42/42 tests) - 1 data-quality bug (MXN ad lines)", "frontend": "100% of requested flows work; minor design issues"},
+  "seed_data_creation": "Demo users created via POST /api/auth/demo; one added TEST_Greek Yogurt and Aldi to its stores. No seeded data modified.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Wait about 7s after demo login before tapping header items on stack screens: the AlertWatcher deal banner covers the header and steals force-clicks. Ads chip testIDs are lowercase with no punctuation (ads-store-kroger, ads-store-heb, ads-store-tomthumb). ad_cache currently holds Kroger/Walmart/Target/Aldi/Sprouts/H-E-B/Tom Thumb for 75201. Run pytest with '-n 0' to see print output (pytest.ini enables xdist).",
+  "rca_of_issue": "MXN lines: Exa query '{store} weekly ad this week grocery sale prices near 75201' returned informador.mx 'Martes de frescura en Walmart'. _match_store(blob, [store], url) passes because 'walmart' is in the URL and title. _ad_lines accepts any line with a price regex match and 3+ letters, so 'Calabaza blanca a $130.00 la pieza' passes."
+}

@@ -1,8 +1,10 @@
-import { ActivityIndicator, RefreshControl, ScrollView, View } from "react-native";
+import { useRouter } from "expo-router";
+import { CaretRight, ShareNetwork } from "phosphor-react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import Animated, { FadeInDown, ZoomIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { money, useSavings } from "@/src/api";
+import { money, useSavings, useTrip } from "@/src/api";
 import { CHECK_BAR_HEIGHT, CheckDealsBar } from "@/src/components/check-deals-bar";
 import { Button, StoreAvatar, Txt } from "@/src/components/ui";
 import { usesNativeTabs } from "@/src/navigation";
@@ -22,7 +24,9 @@ export default function SavingsScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const bottomChrome = usesNativeTabs ? insets.bottom : 0;
+  const router = useRouter();
   const q = useSavings();
+  const trip = useTrip();
   const s = q.data;
   const max = Math.max(1, ...(s?.by_store.map((b) => b.savings) ?? [1]));
 
@@ -50,7 +54,25 @@ export default function SavingsScreen() {
               <Txt testID="savings-deal-count" style={styles.heroStat}>{s?.deal_count ?? 0} of {s?.item_count ?? 0} items on sale</Txt>
               <Txt style={styles.heroStat}>{ago(s?.last_checked_at)}</Txt>
             </View>
+            {(s?.total ?? 0) > 0 && (
+              <Pressable testID="savings-share-button" onPress={() => router.push("/share-card")} style={styles.shareBtn}>
+                <ShareNetwork size={18} color={colors.brandSecondary} weight="bold" />
+                <Txt medium style={styles.shareText}>Share my savings</Txt>
+              </Pressable>
+            )}
           </Animated.View>
+
+          {trip.data?.store && (
+            <Pressable testID="savings-trip-card" onPress={() => router.push("/trip")} style={styles.tripCard}>
+              <StoreAvatar store={trip.data.store} size={44} />
+              <View style={{ flex: 1 }}>
+                <Txt style={styles.small}>Best single-store trip</Txt>
+                <Txt medium style={styles.tripTitle}>Shop {trip.data.store}, save {money(trip.data.savings)}</Txt>
+                <Txt style={styles.small}>Shopping list for {trip.data.items.length} items · est. {money(trip.data.estimated_total)}</Txt>
+              </View>
+              <CaretRight size={20} color={colors.muted} />
+            </Pressable>
+          )}
 
           {s && s.item_count === 0 ? (
             <Txt testID="savings-empty" style={styles.muted}>Start adding to your watchlist to see savings.</Txt>
@@ -109,6 +131,10 @@ const useStyles = makeStyles((c) => ({
   heroNum: { color: c.onBrandPrimary, fontSize: 80, lineHeight: 92, letterSpacing: -3 },
   heroStats: { marginTop: spacing.lg, gap: 2 },
   heroStat: { color: c.onBrandPrimary, opacity: 0.85, fontSize: 13 },
+  shareBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, alignSelf: "flex-start", marginTop: spacing.lg, height: 44, minWidth: 180, paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: c.onBrandPrimary },
+  shareText: { color: c.brandSecondary, fontSize: 14 },
+  tripCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, backgroundColor: c.brandTertiary, borderRadius: radius.lg },
+  tripTitle: { fontSize: 17, color: c.onBrandTertiary },
   section: { gap: spacing.md },
   sectionTitle: { fontSize: 20 },
   storeRow: { flexDirection: "row", gap: spacing.md, padding: spacing.lg, backgroundColor: c.surfaceSecondary, borderRadius: radius.lg, borderWidth: 1, borderColor: c.border },

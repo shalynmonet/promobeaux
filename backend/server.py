@@ -302,11 +302,32 @@ async def update_item(item_id: str, body: ItemIn, user: User = Depends(current_u
 
 @api.delete("/watchlist/{item_id}")
 async def delete_item(item_id: str, user: User = Depends(current_user)):
-    res = await db.items.delete_one({"_id": _oid(item_id), "user_id": user.user_id})
-    if not res.deleted_count:
+    item = await db.items.find_one({"_id": _oid(item_id), "user_id": user.user_id})
+    if not item:
         raise HTTPException(404, "Item not found")
+    deals = await db.deals.find({"user_id": user.user_id, "item_id": item_id}).to_list(100)
+    # Keep a restorable copy so the app can offer "Undo".
+    await db.trash.replace_one({"_id": item["_id"]},
+                               {"_id": item["_id"], "user_id": user.user_id, "item": item, "deals": deals,
+                                "deleted_at": now_iso()}, upsert=True)
+    await db.items.delete_one({"_id": item["_id"]})
     await db.deals.delete_many({"user_id": user.user_id, "item_id": item_id})
     return {"ok": True}
+
+
+@api.post("/watchlist/{item_id}/restore")
+async def restore_item(item_id: str, user: User = Depends(current_user)):
+    doc = await db.trash.find_one({"_id": _oid(item_id), "user_id": user.user_id})
+    if not doc:
+        raise HTTPException(404, "Nothing to restore")
+    await db.items.replace_one({"_id": doc["item"]["_id"]}, doc["item"], upsert=True)
+    # Don't resurrect sample deals after a real scan, or deals from stores the user has since removed.
+    keep = [d for d in doc["deals"]
+            if d.get("store") in user.stores and not (d.get("is_sample") and user.last_checked_at)]
+    if keep:
+        await db.deals.insert_many(keep)
+    await db.trash.delete_one({"_id": doc["_id"]})
+    return Item.from_mongo(doc["item"]).model_dump()
 
 
 @api.get("/barcode/{code}")
@@ -471,7 +492,7 @@ def _collect(item: Item, results, stores: List[str], best: dict, source_kind: st
     """Score every highlight in a set of Exa results for one item; keep the best deal per store."""
     for r in results or []:
         url = getattr(r, "url", "") or ""
-        if not url.startswith("http"):
+        if not url.startswith("http") or _foreign(url):
             continue
         title = getattr(r, "title", "") or ""
         highlights = getattr(r, "highlights", None) or []
@@ -653,12 +674,142 @@ async def register_push(body: RegisterPushBody, user: User = Depends(current_use
     return {"status": "registered"}
 
 
+# ---------------------------------------------------------------- best store trip
+@api.get("/trip")
+async def best_store_trip(user: User = Depends(current_user)):
+    """Pick the one store that saves the most on the watchlist this week and build its shopping list."""
+    items = [Item.from_mongo(d) for d in await db.items.find({"user_id": user.user_id}).to_list(200)]
+    deals = [Deal.from_mongo(d) for d in await db.deals.find(
+        {"user_id": user.user_id, "store": {"$in": user.stores}}).to_list(500)]
+    best_at: dict = {}  # (store, item_id) -> best deal
+    for d in deals:
+        k = (d.store, d.item_id)
+        if k not in best_at or d.savings > best_at[k].savings:
+            best_at[k] = d
+    totals: dict = {}
+    for (store, _), d in best_at.items():
+        totals[store] = round(totals.get(store, 0) + d.savings, 2)
+    if not totals:
+        return {"store": None, "savings": 0, "estimated_total": round(sum(i.usual_price for i in items), 2),
+                "items": [], "alternatives": []}
+    store = max(totals, key=lambda s: (totals[s], -user.stores.index(s) if s in user.stores else 0))
+    rows = []
+    for i in items:
+        d = best_at.get((store, i.id))
+        rows.append({
+            "item_id": i.id, "name": i.name, "brand": i.brand, "size": i.size, "usual_price": i.usual_price,
+            "price": d.sale_price if d else i.usual_price, "savings": d.savings if d else 0,
+            "promo_type": d.promo_type if d else None, "on_deal": bool(d),
+        })
+    rows.sort(key=lambda r: (not r["on_deal"], -r["savings"], r["name"]))
+    return {
+        "store": store, "savings": totals[store],
+        "estimated_total": round(sum(r["price"] for r in rows), 2),
+        "items": rows,
+        "alternatives": sorted(({"store": s, "savings": v} for s, v in totals.items() if s != store),
+                               key=lambda x: -x["savings"]),
+    }
+
+
+# ---------------------------------------------------------------- weekly ad browser
+AD_LINE_SPLIT = re.compile(r"\.\.\.|…|\n|\s\|\s|•|\s-\s(?=[A-Z])")
+FOREIGN_HOST = re.compile(r"\.(mx|ca|uk|au|es|ar|cl|br|in|de|fr|it|nz|ie|pe|ve|gt|cr|pr)$")
+SPANISH_HINT = re.compile(r"\b(la pieza|el kilo|por kilo|kilogramo|pesos|precio|ofertas?|oferta de|frutas|verduras)\b", re.I)
+HEADLINE_HINT = re.compile(
+    r"^(save|get|earn|shop|deals?|this week|weekly|top|best|hot|new)\b|and more|\bwyb\b|participating|prices listed|"
+    r"valid (thru|through|from)|while supplies|limit \d|see store|terms apply", re.I)
+
+
+def _foreign(url: str) -> bool:
+    """True for non-US sources (e.g. walmart.com.mx coverage on .mx news sites)."""
+    host = re.sub(r"^https?://", "", url.lower()).split("/")[0].split(":")[0]
+    return bool(FOREIGN_HOST.search(host)) or "/es-mx/" in url.lower() or "/es/" in url.lower()
+
+
+def _ad_lines(text: str) -> List[str]:
+    out = []
+    for raw in AD_LINE_SPLIT.split(text):
+        line = re.sub(r"[#*_\[\]>]+", " ", raw)
+        line = re.sub(r"\s+", " ", line).strip(" -–:;,.")
+        if not (12 <= len(line) <= 160 and PRICE_RE.search(line) and re.search(r"[A-Za-z]{3,}", line)):
+            continue
+        if SPANISH_HINT.search(line) or HEADLINE_HINT.search(line):
+            continue
+        out.append(line)
+    return out
+
+
+def _exa_ad_browse(store: str, zip_code: str):
+    since = (datetime.now(timezone.utc) - timedelta(days=14)).strftime("%Y-%m-%dT00:00:00.000Z")
+    return exa.search(
+        f"{store} weekly ad this week grocery sale prices near {zip_code}",
+        type="auto", num_results=6, start_published_date=since,
+        contents={"highlights": {"query": f"{store} weekly ad grocery items with sale prices, BOGO and digital coupons",
+                                 "max_characters": 4000}},
+    )
+
+
+@api.get("/ads/{store}")
+async def weekly_ad(store: str, refresh: bool = False, user: User = Depends(current_user)):
+    if store not in STORES:
+        raise HTTPException(404, "Unknown store")
+    zip_code = user.zip or "75201"
+    key = f"{store}|{zip_code}"
+    cached = await db.ad_cache.find_one({"_id": key})
+    fresh_cutoff = (datetime.now(timezone.utc) - timedelta(hours=6)).isoformat()
+    demo_cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    # Demo shoppers reuse a cached ad for 24h (keeps paid searches down); others refresh after 6h or on pull-to-refresh.
+    use_cache = cached and (
+        (user.is_demo and cached["retrieved_at"] > demo_cutoff)
+        or (not refresh and cached["retrieved_at"] > fresh_cutoff)
+    )
+    if use_cache:
+        return {k: v for k, v in cached.items() if k != "_id"}
+    try:
+        resp = await asyncio.to_thread(_exa_ad_browse, store, zip_code)
+    except Exception as e:
+        logger.warning(f"Ad browse failed for {store}: {e}")
+        if cached:
+            return {k: v for k, v in cached.items() if k != "_id"}
+        raise HTTPException(502, "Couldn't load this store's weekly ad right now")
+    seen, lines, sources = set(), [], []
+    for r in getattr(resp, "results", []) or []:
+        url, title = getattr(r, "url", "") or "", getattr(r, "title", "") or ""
+        if not url.startswith("http") or _foreign(url):
+            continue
+        blob = f" {url} {title} ".lower()
+        if _match_store(blob + " " + " ".join(getattr(r, "highlights", None) or []).lower(), [store], url) != store:
+            continue
+        added = 0
+        for hl in getattr(r, "highlights", None) or []:
+            for line in _ad_lines(hl):
+                norm = re.sub(r"[^a-z0-9$.]", "", line.lower())
+                if norm in seen:
+                    continue
+                seen.add(norm)
+                price = PRICE_RE.search(line)
+                promo = "bogo" if re.search(r"\bbogo\b|\bb1g1\b|buy\s?(one|1)\s?,?\s?get", line.lower()) else (
+                    "coupon" if "coupon" in line.lower() else None)
+                lines.append({"text": line, "price": float(price.group(1)) if price else None,
+                              "promo_type": promo, "source_url": url})
+                added += 1
+        if added:
+            sources.append({"title": title[:120], "url": url})
+    doc = {"store": store, "zip": zip_code, "retrieved_at": now_iso(), "lines": lines[:80], "sources": sources}
+    if lines:  # never cache an empty ad, so the next visit tries again
+        await db.ad_cache.replace_one({"_id": key}, {"_id": key, **doc}, upsert=True)
+    else:
+        await db.ad_cache.delete_one({"_id": key})
+    return doc
+
+
 # ---------------------------------------------------------------- scheduler
 scheduler = AsyncIOScheduler(timezone="America/Chicago")
 
 
 async def daily_check():
     cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    await db.trash.delete_many({"deleted_at": {"$lt": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()}})
     async for doc in db.users.find({"is_demo": True, "created_at": {"$lt": cutoff}}):
         for coll in (db.items, db.deals, db.alerts, db.users):
             await coll.delete_many({"user_id": doc["user_id"]})

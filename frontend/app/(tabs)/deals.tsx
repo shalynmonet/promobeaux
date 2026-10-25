@@ -1,8 +1,9 @@
 import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
-import { ArrowSquareOut } from "phosphor-react-native";
+import { useRouter } from "expo-router";
+import { ArrowSquareOut, Newspaper } from "phosphor-react-native";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -68,6 +69,7 @@ export default function DealsScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const bottomChrome = usesNativeTabs ? insets.bottom : 0;
+  const router = useRouter();
   const me = useMe();
   const deals = useDeals();
   const [store, setStore] = useState("All");
@@ -86,7 +88,13 @@ export default function DealsScreen() {
   return (
     <View style={styles.root} testID="deals-screen">
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Txt style={styles.kicker}>Near {me.data?.zip ?? "—"}</Txt>
+        <View style={styles.kickerRow}>
+          <Txt style={styles.kicker}>Near {me.data?.zip ?? "—"}</Txt>
+          <Pressable testID="deals-weekly-ads-button" onPress={() => router.push("/ads")} style={styles.adsBtn}>
+            <Newspaper size={16} color={colors.onBrandTertiary} />
+            <Txt medium style={styles.adsBtnText}>Weekly ads</Txt>
+          </Pressable>
+        </View>
         <View style={styles.titleRow}>
           <Txt style={styles.title}>This week&apos;s deals</Txt>
           {filtered.length > 0 && <Txt medium testID="deals-total-savings" style={styles.total}>{money(total)} off</Txt>}
@@ -136,6 +144,9 @@ const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
   header: { paddingHorizontal: spacing.lg, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.divider },
   kicker: { color: c.muted, fontSize: 13 },
+  kickerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  adsBtn: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.pill, backgroundColor: c.brandTertiary },
+  adsBtnText: { fontSize: 13, color: c.onBrandTertiary },
   titleRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: spacing.sm },
   title: { fontSize: 26, letterSpacing: -0.5 },
   total: { fontSize: 16, color: c.brandPrimary },

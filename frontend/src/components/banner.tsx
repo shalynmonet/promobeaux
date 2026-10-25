@@ -16,6 +16,7 @@ type BannerOpts = {
   onPress?: () => void;
   onDismiss?: () => void;
   sticky?: boolean;
+  duration?: number; // ms; banners with an action stay until dismissed unless this is set
 };
 
 const BannerCtx = createContext<(o: BannerOpts) => void>(() => {});
@@ -30,7 +31,8 @@ export function BannerProvider({ children }: { children: ReactNode }) {
   const show = useCallback((o: BannerOpts) => {
     if (timer.current) clearTimeout(timer.current);
     setBanner({ ...o, key: Date.now() });
-    if (!o.sticky && !o.actionLabel) timer.current = setTimeout(() => setBanner(null), 4500);
+    const ms = o.duration ?? (o.sticky || o.actionLabel ? null : 4500);
+    if (ms) timer.current = setTimeout(() => setBanner(null), ms);
   }, []);
 
   const close = () => {
@@ -102,7 +104,7 @@ const useStyles = makeStyles((c) => ({
   body: { flex: 1, gap: 2 },
   title: { fontSize: 15 },
   msg: { fontSize: 13, color: c.muted },
-  action: { alignSelf: "flex-start", marginTop: spacing.sm, paddingVertical: spacing.xs + 2, paddingHorizontal: spacing.md, borderRadius: radius.pill, backgroundColor: c.brandPrimary },
+  action: { alignSelf: "flex-start", marginTop: spacing.sm, minHeight: 44, minWidth: 72, justifyContent: "center", alignItems: "center", paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: c.brandPrimary },
   actionText: { color: c.onBrandPrimary, fontSize: 13 },
   close: { padding: 2 },
 }));

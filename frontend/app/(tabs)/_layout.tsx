@@ -1,4 +1,4 @@
-import { Redirect, Tabs, useRouter } from "expo-router";
+import { Redirect, Tabs, useRouter, useSegments } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { ListChecks, PiggyBank, Tag, UserCircle } from "phosphor-react-native";
 import { useEffect, useRef } from "react";
@@ -16,10 +16,13 @@ function AlertWatcher() {
   const banner = useBanner();
   const router = useRouter();
   const api = useApi();
+  const segments = useSegments();
+  const onTabs = segments[0] === "(tabs)";
   const seen = useRef<Set<string> | null>(null);
 
   useEffect(() => {
-    if (!alerts.data) return;
+    // Only pop deal alerts on the main tabs, so they never cover the header of a pushed screen.
+    if (!alerts.data || !onTabs) return;
     const unread = alerts.data.filter((a) => !a.read);
     if (seen.current === null) {
       seen.current = new Set();
@@ -35,7 +38,7 @@ function AlertWatcher() {
       onPress: () => router.navigate("/(tabs)/deals"),
       onDismiss: () => api("/alerts/read-all", { method: "POST" }).catch(() => {}),
     });
-  }, [alerts.data, banner, router, api]);
+  }, [alerts.data, banner, router, api, onTabs]);
 
   return null;
 }

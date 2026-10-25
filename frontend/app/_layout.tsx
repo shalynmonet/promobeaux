@@ -119,6 +119,7 @@ export default function RootLayout() {
                   <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
                     <Stack.Screen name="add-item" options={{ presentation: "modal" }} />
                     <Stack.Screen name="scan" options={{ presentation: "fullScreenModal" }} />
+                    <Stack.Screen name="share-card" options={{ presentation: "modal" }} />
                   </Stack>
                 </BannerProvider>
               </KeyboardProvider>

@@ -23,6 +23,13 @@ Clerk keys provided · Exa key provided · push + in-app banners · daily check 
 - Matcher stays within a single ad line (no crossing "..." separators). Sample deals are cleared after the first real scan; an item's earlier deals are kept if only its own search fails. Two-letter store badges (TT vs T).
 - Tested in iteration 3 (66/66 backend tests pass after fixes).
 
+## Iteration 3 (2026-10-25)
+- Savings share card (/share-card): branded image via react-native-view-shot + expo-sharing on phones; text share fallback on web.
+- Undo delete: deleted items + deals go to `trash` (cleared after 1 day); POST /api/watchlist/{id}/restore; 6s Undo banner.
+- Weekly ad browser (/ads, from the Deals header): GET /api/ads/{store} uses Exa, caches 6h (24h for demo), never caches empty results, drops non-US/Spanish sources and headline lines; "Watch" pre-fills Add item.
+- Best store trip (/trip, from Savings): GET /api/trip picks the store with the highest summed best-deal savings (current stores only), builds the shopping list with an estimated total; checkmarks saved on the device.
+- Deal alert banners show only on the main tabs. Tested in iteration 4; fixes then checked with pytest (81 pass).
+
 ## Backlog
 - P1: Confirm before deleting an item (or offer undo); stricter brand+product matching (e.g. Tyson nuggets vs breast).
 - P1: Price history per item; shopping list for the best store this week.

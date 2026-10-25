@@ -52,7 +52,8 @@
         {
           "cameraPermission": "Scan barcodes to add groceries fast"
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true

@@ -5,7 +5,7 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from "re
 import Animated, { FadeInDown, LinearTransition } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Item, money, useDeals, useDeleteItem, useWatchlist } from "@/src/api";
+import { Item, money, useDeals, useDeleteItem, useRestoreItem, useWatchlist } from "@/src/api";
 import { useBanner } from "@/src/components/banner";
 import { Button, PressScale, Txt } from "@/src/components/ui";
 import { usesNativeTabs } from "@/src/navigation";
@@ -22,6 +22,7 @@ export default function WatchlistScreen() {
   const list = useWatchlist();
   const deals = useDeals();
   const del = useDeleteItem();
+  const restore = useRestoreItem();
   const banner = useBanner();
 
   const onSale = new Set((deals.data ?? []).map((d) => d.item_id));
@@ -34,7 +35,19 @@ export default function WatchlistScreen() {
 
   const remove = (it: Item) =>
     del.mutate(it.id, {
-      onSuccess: () => banner({ tone: "success", title: `Removed ${it.name}` }),
+      onSuccess: () =>
+        banner({
+          tone: "success",
+          title: `Removed ${it.name}`,
+          message: "Changed your mind?",
+          actionLabel: "Undo",
+          duration: 6000,
+          onAction: () =>
+            restore.mutate(it.id, {
+              onSuccess: () => banner({ tone: "success", title: `${it.name} is back on your list` }),
+              onError: (e) => banner({ tone: "error", title: "Couldn't restore item", message: e.message }),
+            }),
+        }),
       onError: (e) => banner({ tone: "error", title: "Couldn't remove item", message: e.message }),
     });
 

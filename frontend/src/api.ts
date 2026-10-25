@@ -61,7 +61,7 @@ export function useCheckDeals() {
   return useMutation({
     mutationFn: () => api<CheckResult>("/deals/check", { method: "POST" }),
     onSuccess: () => {
-      ["deals", "savings", "alerts", "me"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      ["deals", "savings", "alerts", "me", "trip"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     },
   });
 }
@@ -73,8 +73,7 @@ export function useSaveItem() {
     mutationFn: ({ id, ...body }: ItemInput & { id?: string }) =>
       api<Item>(id ? `/watchlist/${id}` : "/watchlist", { method: id ? "PUT" : "POST", body: JSON.stringify(body) }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["watchlist"] });
-      qc.invalidateQueries({ queryKey: ["savings"] });
+      ["watchlist", "savings", "trip"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     },
   });
 }
@@ -84,8 +83,47 @@ export function useDeleteItem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api(`/watchlist/${id}`, { method: "DELETE" }),
-    onSuccess: () => ["watchlist", "deals", "savings"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+    onSuccess: () => ["watchlist", "deals", "savings", "trip"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
   });
 }
 
 export const money = (n: number) => `$${n.toFixed(2)}`;
+
+export type TripRow = {
+  item_id: string; name: string; brand: string; size: string; usual_price: number; price: number;
+  savings: number; promo_type: Deal["promo_type"] | null; on_deal: boolean;
+};
+export type Trip = { store: string | null; savings: number; estimated_total: number; items: TripRow[]; alternatives: { store: string; savings: number }[] };
+export type AdLine = { text: string; price: number | null; promo_type: "bogo" | "coupon" | null; source_url: string };
+export type AdPage = { store: string; zip: string; retrieved_at: string; lines: AdLine[]; sources: { title: string; url: string }[] };
+
+export const useTrip = () => useAuthedQuery<Trip>("trip", "/trip");
+
+export function useAds(store: string | undefined) {
+  const api = useApi();
+  const { signedIn } = useSession();
+  return useQuery({
+    queryKey: ["ads", store],
+    queryFn: () => api<AdPage>(`/ads/${encodeURIComponent(store!)}`),
+    enabled: signedIn && !!store,
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
+export function useRefreshAds() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (store: string) => api<AdPage>(`/ads/${encodeURIComponent(store)}?refresh=true`),
+    onSuccess: (page) => qc.setQueryData(["ads", page.store], page),
+  });
+}
+
+export function useRestoreItem() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<Item>(`/watchlist/${id}/restore`, { method: "POST" }),
+    onSuccess: () => ["watchlist", "deals", "savings", "trip"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  });
+}

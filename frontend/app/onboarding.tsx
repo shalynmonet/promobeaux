@@ -49,7 +49,7 @@ export default function Onboarding() {
     try {
       const user = await api<User>("/me/onboarding", { method: "PUT", body: JSON.stringify({ zip, stores }) });
       qc.setQueryData(["me"], user);
-      ["deals", "savings", "alerts"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      ["deals", "savings", "alerts", "trip"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       if (edit) router.back();
       else router.replace("/(tabs)/watchlist");
     } catch (e: any) {
