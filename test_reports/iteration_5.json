@@ -1,0 +1,53 @@
+{
+  "summary": "Tested the Deal Expiry feature on backend and frontend, plus regression. Backend: 15/15 new expiry tests pass (ends_at/ends_estimated/remind fields, seed offsets +1/+3/+5/+6, expired deals hidden from /deals, /savings and /trip, deals ending today still shown, reminder toggle on/off/on gives exactly 1 'Cheerios Cereal deal ends tomorrow at Walmart' alert, 'ends today' wording, deals >1 day out send 0, 404/400/422/401 and other-user 404, parse_end_date samples, deal_end estimates). A live /deals/check passed: new_alerts equals the number of alerts created, then 429. 4 concurrent toggles gave no 500s and no duplicate alerts. 42/42 regression tests pass. Frontend at 390 and 375 px: expiry pills (Ends today/Ends Tue, Oct 27/Likely ends Tue, Oct 27/End date unknown), amber urgent pill, 44x44 bell with aria-checked, banners for reminder on/off, Cheerios expiry alert banner and Profile recent alert, Ending soon filter and its 'Nothing ending soon' empty state, and regression flows (demo login, savings and share card, trip, watchlist delete with undo, weekly ads with 73 lines) all work. Found 2 logic issues (timezone mismatch, month-word false positives in parse_end_date) and some design issues. No deprecated Expo packages found.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "parse_end_date / _collect (server.py:499 MON regex)", "issue": "MON = '(jan|...|dec)[a-z]*' matches product words that start with a month abbreviation (Decaf, Octopus, Marinara, Mayo, ...), so sizes like '12 - 24 oz' are read as date ranges. Reproduced: today=2026-10-24, 'Octopus 8 - 10 oz' -> Oct 10, marked expired, so the real deal is SKIPPED. On 2026-01-05, 'Folgers Decaf 12 - 24 oz $8.99' -> Dec 24, expired, deal dropped. On 2026-02-20, 'Marinara 2 to 3 jars' -> Mar 3 (wrong ends_at). On 2026-04-25, 'Mayo 12 - 15 oz' -> May 15.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "parse_end_date candidate choice", "issue": "It returns the first match by regex type across the whole title+highlight text, not the date tied to the deal line. Live example: the Kroger coffee deal (retailshout.com/kroger-weekly-ad-for-you) got ends_at 2026-10-26 from 'October 24-26' (a weekend promo), while the same source has the ad week '10/21 – 10/27'."},
+      {"endpoint": "reminders lifecycle", "issue": "Reminders are not deleted when a watchlist item is permanently removed or a store is dropped, so orphan rows stay. expiry_reminders_job walks every onboarded user, including every throwaway demo user, instead of only users that have reminders (db.reminders.distinct('user_id'))."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "expiryLabel/daysLeft (src/api.ts:102-118)", "issue": "Timezone mismatch. 'today' comes from the device timezone, but the backend uses America/Chicago for ends_at, hiding expired deals and the alert wording. Seen with a UTC browser at 19:45 CDT: the Cheerios pill said 'Ends today' while the alert banner on the same screen said 'Cheerios Cereal deal ends tomorrow at Walmart'. 'Ending soon' also included Eggs, which ends in 3 days by Chicago time. Users in Eastern/Pacific time or near midnight will see wrong relative labels and filters.", "testID": "deal-expiry-<id>", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Deals", "issues": [
+        "The expiry pill is truncated in half-width masonry cards, hiding the date: 'Ends Tue, …' and 'Likely ends…' at 390 px, and even 'Ends tod…' (and 'Walm…') at 375 px. Allow 2 lines or use a shorter format (e.g. 'Ends 10/27', '~Tue 10/27').",
+        "The urgent pill uses white (#FFFFFF) 11 px text on amber #F59E0B (contrast about 2.1:1, fails WCAG AA). Use dark text (e.g. #78350F) or a darker amber (#B45309).",
+        "While an in-app banner is visible it covers the filter chip row (All/Ending soon/stores), so chips can't be tapped until it is dismissed.",
+        "For deals ending today or tomorrow, the reminder confirmation banner ('We'll remind you about …') is replaced within about 0.5 s by the expiry alert banner, so the user never sees it. Consider one combined banner."
+      ]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration5_deal_expiry.py",
+    "/app/backend/tests/test_iteration5_check_expiry.py",
+    "/app/backend/tests/ui_seed_expiry_variants.py",
+    "/app/test_reports/pytest/iteration5_expiry.xml",
+    "/app/test_reports/pytest/iteration5_regression.xml"
+  ],
+  "action_items": [
+    "Restrict the MON regex to real month tokens with word boundaries, e.g. (jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\.?\\b, so 'Decaf/Octopus/Marinara/Mayo 12 - 24 oz' is not read as a date and real deals are not dropped as expired.",
+    "Make expiry day maths use one timezone: return days_left (or a server 'today') from /api/deals, or compute today in America/Chicago on the frontend via Intl timeZone. Ideally derive the timezone from the user's ZIP.",
+    "Stop the expiry pill truncating in half-width cards (2 lines or a shorter date format).",
+    "Fix urgent pill contrast (dark text on amber).",
+    "Optional: prefer the ad-week range (or the date nearest the matched price) in parse_end_date; delete reminders on permanent item delete or store removal; limit expiry_reminders_job to users with reminders; keep banners from covering the filter chips."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 994 lines (>700). Split it into modules (expiry/parsing, exa search, routes).",
+    "Reminder toggle is find-then-insert. A unique index prevents duplicate rows, and 4 concurrent requests gave no 500s, but DuplicateKeyError is not handled explicitly.",
+    "Expiry alert dedup (find on deal_key, then insert) has no unique index on (user_id, deal_key). The cron job and a manual toggle running together could create a duplicate alert (low probability)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration5_deal_expiry.py", "/app/backend/tests/test_iteration5_check_expiry.py", "/app/backend/tests/ui_seed_expiry_variants.py"],
+  "success_rate": {"backend": "100% of feature tests (15/15 + 1 live check + 42 regression); 1 parsing bug found by an exploratory edge-case test", "frontend": "95% (all flows work; timezone label mismatch and design issues)"},
+  "seed_data_creation": "Throwaway demo users only, each deleted after its test. ui_seed_expiry_variants.py patches the next demo user's sample deals (estimated, null, expired, +10 days) for UI label checks.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Server date is 2026-10-24 CDT (browser runs in UTC, already Oct 25), so relative labels differ near CDT evening. pytest.ini adds -n/xdist; use '-o addopts=\"\"' for single-process runs. To verify UI labels, start tests/ui_seed_expiry_variants.py in the background (with backend .env exported) before tapping the demo button, then reload. Banners can cover the chip row; close in-app-banner-close before tapping chips.",
+  "rca_of_issue": "1) MON '[a-z]*' suffix lets any word starting with jan..dec act as a month, so R_RANGE_TEXT reads '<Word> N - M <unit>' as a date range; dates within the last 30 days count as expired and _collect skips the deal. 2) The frontend daysLeft uses new Date() in the device timezone, while the backend local_today() is America/Chicago."
+}

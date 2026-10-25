@@ -1,19 +1,21 @@
 import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
 import { useRouter } from "expo-router";
-import { ArrowSquareOut, Newspaper } from "phosphor-react-native";
+import { ArrowSquareOut, BellRinging, BellSimple, Clock, Newspaper } from "phosphor-react-native";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Deal, money, useDeals, useMe } from "@/src/api";
+import { daysLeft, Deal, expiryLabel, money, useDeals, useMe, useToggleReminder } from "@/src/api";
+import { useBanner } from "@/src/components/banner";
 import { CHECK_BAR_HEIGHT, CheckDealsBar } from "@/src/components/check-deals-bar";
-import { Button, Chip, PressScale, StoreAvatar, Txt } from "@/src/components/ui";
+import { Button, Chip, haptic, PressScale, StoreAvatar, Txt } from "@/src/components/ui";
 import { usesNativeTabs } from "@/src/navigation";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 const EMPTY_IMG = "https://images.pexels.com/photos/15491784/pexels-photo-15491784.jpeg?auto=compress&cs=tinysrgb&w=800";
+const ENDING_SOON = "Ending soon";
 
 function badgeText(d: Deal) {
   if (d.promo_type === "bogo") return "BOGO";
@@ -25,7 +27,32 @@ const PROMO_LABEL: Record<Deal["promo_type"], string> = { sale: "Sale price", bo
 function DealCard({ deal, index }: { deal: Deal; index: number }) {
   const styles = useStyles();
   const { colors } = useTheme();
+  const toggle = useToggleReminder();
+  const banner = useBanner();
+  const expiry = expiryLabel(deal);
   const open = () => deal.source_url && WebBrowser.openBrowserAsync(deal.source_url);
+  const remind = () => {
+    haptic();
+    toggle.mutate(
+      { item_id: deal.item_id, store: deal.store },
+      {
+        onSuccess: (r) => {
+          // When the reminder fires right away (deal ends today/tomorrow) the alert banner says it all.
+          if (r.sent > 0) return;
+          banner({
+            tone: "success",
+            title: r.remind ? `We'll remind you about ${deal.item_name}` : "Reminder removed",
+            message: r.remind
+              ? deal.ends_at
+                ? "You'll get an alert the day before this deal ends."
+                : "We'll alert you once we know when this deal ends."
+              : undefined,
+          });
+        },
+        onError: (e) => banner({ tone: "error", title: "Couldn't update reminder", message: e.message }),
+      },
+    );
+  };
   return (
     <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 60).springify().damping(18)}>
       <PressScale testID={`deal-card-${deal.id}`} onPress={open} style={styles.card}>
@@ -37,6 +64,22 @@ function DealCard({ deal, index }: { deal: Deal; index: number }) {
             {PROMO_LABEL[deal.promo_type]}
             {deal.source_kind === "weekly_ad" ? " · Weekly ad" : ""}
           </Txt>
+          <Pressable
+            testID={`deal-remind-${deal.id}`}
+            onPress={remind}
+            disabled={toggle.isPending}
+            style={[styles.remindBtn, deal.remind && styles.remindOn]}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: !!deal.remind }}
+            aria-checked={!!deal.remind}
+            accessibilityLabel={deal.remind ? "Reminder on" : "Remind me before it ends"}
+          >
+            {deal.remind ? (
+              <BellRinging size={18} color={colors.onBrandPrimary} weight="fill" />
+            ) : (
+              <BellSimple size={18} color={colors.brandSecondary} />
+            )}
+          </Pressable>
         </View>
         <View style={styles.cardBody}>
           <Txt medium style={styles.name} numberOfLines={2}>{deal.item_name}</Txt>
@@ -49,6 +92,12 @@ function DealCard({ deal, index }: { deal: Deal; index: number }) {
           </View>
           <Txt medium style={styles.save}>Save {money(deal.savings)}</Txt>
           {!!deal.promo_text && <Txt style={styles.promo} numberOfLines={3}>{deal.promo_text}</Txt>}
+          <View style={[styles.expiryPill, expiry?.urgent && styles.expiryUrgent]}>
+            <Clock size={13} color={expiry?.urgent ? colors.onSurface : colors.muted} weight={expiry?.urgent ? "fill" : "regular"} />
+            <Txt testID={`deal-expiry-${deal.id}`} style={[styles.expiryText, expiry?.urgent && styles.expiryTextUrgent]} numberOfLines={1}>
+              {expiry?.text ?? "End date unknown"}
+            </Txt>
+          </View>
           <View style={styles.footer}>
             <StoreAvatar store={deal.store} size={22} />
             <Txt style={styles.store} numberOfLines={1}>{deal.store}</Txt>
@@ -74,16 +123,25 @@ export default function DealsScreen() {
   const deals = useDeals();
   const [store, setStore] = useState("All");
 
-  const filtered = useMemo(
-    () => (deals.data ?? []).filter((d) => store === "All" || d.store === store),
-    [deals.data, store],
-  );
+  const filtered = useMemo(() => {
+    const list = deals.data ?? [];
+    if (store === ENDING_SOON) {
+      // Deals ending within 2 days, soonest first.
+      return list
+        .filter((d) => {
+          const left = daysLeft(d);
+          return left !== null && left <= 2;
+        })
+        .sort((a, b) => (daysLeft(a) ?? 99) - (daysLeft(b) ?? 99));
+    }
+    return list.filter((d) => store === "All" || d.store === store);
+  }, [deals.data, store]);
   // Same rule as the Savings screen: count only the best deal per item.
   const total = Object.values(
     filtered.reduce<Record<string, number>>((acc, d) => ({ ...acc, [d.item_id]: Math.max(acc[d.item_id] ?? 0, d.savings) }), {}),
   ).reduce((s, v) => s + v, 0);
   const cols = [filtered.filter((_, i) => i % 2 === 0), filtered.filter((_, i) => i % 2 === 1)];
-  const chips = ["All", ...(me.data?.stores ?? [])];
+  const chips = ["All", ENDING_SOON, ...(me.data?.stores ?? [])];
 
   return (
     <View style={styles.root} testID="deals-screen">
@@ -121,8 +179,12 @@ export default function DealsScreen() {
           {filtered.length === 0 ? (
             <View style={styles.empty} testID="deals-empty">
               <Image source={{ uri: EMPTY_IMG }} style={styles.emptyImg} contentFit="cover" transition={300} />
-              <Txt style={styles.emptyTitle}>No deals yet</Txt>
-              <Txt style={styles.emptyText}>Tap &quot;Check deals now&quot; and we&apos;ll scan this week&apos;s ads for your watchlist.</Txt>
+              <Txt style={styles.emptyTitle}>{store === ENDING_SOON ? "Nothing ending soon" : "No deals yet"}</Txt>
+              <Txt style={styles.emptyText}>
+                {store === ENDING_SOON
+                  ? "None of your deals end in the next 2 days. Tap the bell on a deal to get a reminder before it ends."
+                  : "Tap \"Check deals now\" and we'll scan this week's ads for your watchlist."}
+              </Txt>
             </View>
           ) : (
             <View style={styles.masonry}>
@@ -172,6 +234,12 @@ const useStyles = makeStyles((c) => ({
   was: { fontSize: 13, color: c.muted, textDecorationLine: "line-through" },
   save: { fontSize: 13, color: c.brandSecondary },
   promo: { fontSize: 12, color: c.muted, lineHeight: 17 },
+  expiryPill: { alignSelf: "flex-start", maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 4, marginTop: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: c.surfaceTertiary },
+  expiryUrgent: { backgroundColor: c.warning },
+  expiryText: { flexShrink: 1, fontSize: 12, color: c.muted },
+  expiryTextUrgent: { color: c.onSurface },
+  remindBtn: { position: "absolute", top: spacing.xs, right: spacing.xs, width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: c.surfaceSecondary },
+  remindOn: { backgroundColor: c.brandPrimary },
   footer: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: c.divider },
   store: { flex: 1, fontSize: 13 },
   sample: { fontSize: 11, color: c.onSurfaceTertiary, backgroundColor: c.surfaceTertiary, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.pill, overflow: "hidden" },

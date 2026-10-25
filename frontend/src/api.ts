@@ -10,6 +10,7 @@ export type Deal = {
   usual_price: number; sale_price: number; savings: number; pct_off: number;
   promo_type: "sale" | "bogo" | "coupon" | "cashback"; promo_text: string; source_url: string; source_title: string;
   source_kind?: "search" | "weekly_ad";
+  ends_at?: string | null; ends_estimated?: boolean; remind?: boolean; days_left?: number | null;
   is_sample: boolean; found_at: string;
 };
 export type Savings = {
@@ -85,6 +86,31 @@ export function useDeleteItem() {
     mutationFn: (id: string) => api(`/watchlist/${id}`, { method: "DELETE" }),
     onSuccess: () => ["watchlist", "deals", "savings", "trip"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
   });
+}
+
+export function useToggleReminder() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { item_id: string; store: string }) =>
+      api<{ remind: boolean; sent: number }>("/reminders", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => ["deals", "alerts"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  });
+}
+
+// Days until a deal's last valid day (0 = ends today), or null when unknown.
+// Comes from the server, which counts in the store's local time zone, so it matches alert wording.
+export function daysLeft(d: Deal): number | null {
+  return d.days_left ?? null;
+}
+
+export function expiryLabel(d: Deal): { text: string; urgent: boolean } | null {
+  const left = daysLeft(d);
+  if (left === null || !d.ends_at) return null;
+  const [y, m, day] = d.ends_at.split("-").map(Number);
+  const pretty = new Date(y, m - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const when = left <= 0 ? "today" : left === 1 ? "tomorrow" : pretty;
+  return { text: d.ends_estimated ? `Ends ~${when}` : `Ends ${when}`, urgent: left <= 1 };
 }
 
 export const money = (n: number) => `$${n.toFixed(2)}`;

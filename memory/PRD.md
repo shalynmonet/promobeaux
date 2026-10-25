@@ -30,6 +30,12 @@ Clerk keys provided · Exa key provided · push + in-app banners · daily check 
 - Best store trip (/trip, from Savings): GET /api/trip picks the store with the highest summed best-deal savings (current stores only), builds the shopping list with an estimated total; checkmarks saved on the device.
 - Deal alert banners show only on the main tabs. Tested in iteration 4; fixes then checked with pytest (81 pass).
 
+## Iteration 4 (2026-10-25)
+- Deal expiry: `ends_at` read from ad text/URL ("Oct 21 - Oct 27", "valid thru 10/28", slug oct-21-oct-27); otherwise estimated from the store's weekly-ad cycle (Kroger/Aldi/H-E-B/Tom Thumb/Sprouts end Tue, Target Sat; Walmart none) with `ends_estimated`. Deals the ad says are already over are skipped; ended deals are hidden from deals, savings and trip.
+- Reminders: POST /api/reminders toggles a reminder per item+store; one alert (and a phone notification on real builds) when a reminded deal ends today or tomorrow — checked on toggle, after every deal check, and at 9am and 6pm.
+- Deal cards show an expiry pill (warning color when ≤1 day) and a bell toggle; new "Ending soon" chip (≤2 days).
+- After iteration 5 testing: month names must be real words (no "Octopus"), sizes like "12 - 24 oz" are never read as dates, the current ad-week range is preferred over weekend promos, and the server sends days_left in Chicago time so pills and alerts agree. Reminders are removed with their item/store; the reminder job only checks users who set reminders. Bell moved to the card tile, pill is full width with dark text on amber. 97 backend tests pass.
+
 ## Backlog
 - P1: Confirm before deleting an item (or offer undo); stricter brand+product matching (e.g. Tyson nuggets vs breast).
 - P1: Price history per item; shopping list for the best store this week.

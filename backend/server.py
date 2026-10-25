@@ -4,9 +4,10 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any, List, Optional
+from zoneinfo import ZoneInfo
 
 import httpx
 import jwt
@@ -130,6 +131,8 @@ class Deal(BaseDocument):
     source_url: str = ""
     source_title: str = ""
     is_sample: bool = False
+    ends_at: Optional[str] = None  # YYYY-MM-DD, last day the deal is valid (store-local)
+    ends_estimated: bool = False  # True when inferred from the store's usual weekly-ad cycle
     found_at: str = Field(default_factory=now_iso)
 
 
@@ -205,10 +208,11 @@ DEMO_ITEMS = [
     ("Laundry Detergent Pacs", "Tide Pods", "42 ct", 13.99),
 ]
 DEMO_DEALS = {
-    "Large Eggs": ("Kroger", 3.49, "sale", "Digital deal: Eggland's Best Large Eggs 12 ct $3.49 with Card"),
-    "Ground Coffee": ("Target", 9.99, "coupon", "Save $3 with Target Circle on Folgers 25.9 oz canisters"),
-    "Cheerios Cereal": ("Walmart", 2.75, "bogo", "Buy 1 Get 1 Free on select General Mills cereals"),
-    "Laundry Detergent Pacs": ("Kroger", 11.99, "cashback", "$2 cash back on Tide Pods 42 ct via digital rebate"),
+    # name: (store, sale price, promo, text, days until the deal ends)
+    "Large Eggs": ("Kroger", 3.49, "sale", "Digital deal: Eggland's Best Large Eggs 12 ct $3.49 with Card", 3),
+    "Ground Coffee": ("Target", 9.99, "coupon", "Save $3 with Target Circle on Folgers 25.9 oz canisters", 5),
+    "Cheerios Cereal": ("Walmart", 2.75, "bogo", "Buy 1 Get 1 Free on select General Mills cereals", 1),
+    "Laundry Detergent Pacs": ("Kroger", 11.99, "cashback", "$2 cash back on Tide Pods 42 ct via digital rebate", 6),
 }
 
 
@@ -225,12 +229,13 @@ async def seed_demo(uid: str):
         item = Item(user_id=uid, name=name, brand=brand, size=size, usual_price=price)
         res = await db.items.insert_one(item.to_mongo())
         if name in DEMO_DEALS:
-            store, sale, ptype, text = DEMO_DEALS[name]
+            store, sale, ptype, text, days_left = DEMO_DEALS[name]
             savings = round(price - sale, 2)
             await db.deals.insert_one(Deal(
                 user_id=uid, item_id=str(res.inserted_id), item_name=name, brand=brand, size=size,
                 store=store, usual_price=price, sale_price=sale, savings=savings,
                 pct_off=round(savings / price * 100, 1), promo_type=ptype, promo_text=text, is_sample=True,
+                ends_at=(local_today() + timedelta(days=days_left)).isoformat(),
             ).to_mongo())
     await db.alerts.insert_one(Alert(
         user_id=uid, title="Cheerios is BOGO at Walmart",
@@ -267,6 +272,7 @@ async def onboarding(body: OnboardingIn, user: User = Depends(current_user)):
     await db.users.update_one({"user_id": user.user_id},
                               {"$set": {"zip": body.zip, "stores": body.stores, "onboarded": True}})
     await db.deals.delete_many({"user_id": user.user_id, "store": {"$nin": body.stores}})
+    await db.reminders.delete_many({"user_id": user.user_id, "store": {"$nin": body.stores}})
     doc = await db.users.find_one({"user_id": user.user_id})
     return User.from_mongo(doc).model_dump()
 
@@ -312,6 +318,7 @@ async def delete_item(item_id: str, user: User = Depends(current_user)):
                                 "deleted_at": now_iso()}, upsert=True)
     await db.items.delete_one({"_id": item["_id"]})
     await db.deals.delete_many({"user_id": user.user_id, "item_id": item_id})
+    await db.reminders.delete_many({"user_id": user.user_id, "item_id": item_id})
     return {"ok": True}
 
 
@@ -488,6 +495,91 @@ def _exa_search(query: str):
     )
 
 
+# ---------------------------------------------------------------- deal expiry
+LOCAL_TZ = ZoneInfo("America/Chicago")
+MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
+MON = (r"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|"
+       r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?(?![a-z])")
+RANGE_WORDS = r"(?:-|–|—|to|thru|through|until)"
+NOT_SIZE = r"(?!\s*(?:oz|fl|ct|lb|lbs|pk|pack|count|g\b|kg|ml|l\b|jars?|cans?|bottles?|rolls?|pcs?|pieces?|qt|gal))"
+R_RANGE_TEXT = re.compile(rf"{MON}\s*(\d{{1,2}})(?:st|nd|rd|th)?,?\s*{RANGE_WORDS}\s*(?:{MON}\s*)?(\d{{1,2}})\b{NOT_SIZE}", re.I)
+R_END_TEXT = re.compile(rf"\b(?:valid|good|ends?|expires?|thru|through|until|till)\s*(?:on\s*|thru\s*|through\s*)?{MON}\s*(\d{{1,2}})\b{NOT_SIZE}", re.I)
+R_RANGE_NUM = re.compile(rf"(?<![\d.$/])(\d{{1,2}})/(\d{{1,2}})(?:/\d{{2,4}})?\s*(?:-|–|to|thru|through)\s*(\d{{1,2}})/(\d{{1,2}})(?![\d.]){NOT_SIZE}")
+R_END_NUM = re.compile(rf"\b(?:valid|good|ends?|expires?|exp\.?|thru|through|until|till)\s*(?:on\s*)?(\d{{1,2}})/(\d{{1,2}})(?![\d.]){NOT_SIZE}", re.I)
+R_SLUG = re.compile(r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*-(\d{1,2})-(?:(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*-)?(\d{1,2})(?!\d)", re.I)
+# Day (Mon=0) each store's weekly ad usually ends. Walmart has no fixed ad week, so no estimate there.
+STORE_AD_END_WEEKDAY = {"Kroger": 1, "Aldi": 1, "H-E-B": 1, "Tom Thumb": 1, "Sprouts": 1, "Target": 5}
+
+
+def local_today() -> date:
+    return datetime.now(LOCAL_TZ).date()
+
+
+def _resolve(month: str, day: str, today: date) -> Optional[date]:
+    try:
+        d = date(today.year, MONTHS[month.lower()[:3]], int(day))
+    except (ValueError, KeyError):
+        return None
+    if (d - today).days < -180:
+        d = d.replace(year=d.year + 1)
+    elif (d - today).days > 180:
+        d = d.replace(year=d.year - 1)
+    return d
+
+
+def _resolve_num(month: str, day: str, today: date) -> Optional[date]:
+    m = int(month)
+    return _resolve(list(MONTHS)[m - 1], day, today) if 1 <= m <= 12 else None
+
+
+def parse_end_date(text: str, url: str, today: date) -> Optional[date]:
+    """Last valid day of a deal if the ad text or its URL says so (e.g. 'Oct 21 - Oct 27', 'valid thru 10/28')."""
+    ranges: List[Optional[date]] = []
+    singles: List[Optional[date]] = []
+    for m in R_RANGE_TEXT.finditer(text):
+        m1, _, m2, d2 = m.groups()
+        ranges.append(_resolve(m2 or m1, d2, today))
+    for m in R_RANGE_NUM.finditer(text):
+        ranges.append(_resolve_num(m.group(3), m.group(4), today))
+    for m in R_SLUG.finditer(url.lower()):
+        m1, _, m2, d2 = m.groups()
+        ranges.append(_resolve(m2 or m1, d2, today))
+    for m in R_END_TEXT.finditer(text):
+        singles.append(_resolve(m.group(1), m.group(2), today))
+    for m in R_END_NUM.finditer(text):
+        singles.append(_resolve_num(m.group(1), m.group(2), today))
+
+    def ok(c):  # ended within the last month (stale ads count as expired) or ending within ~6 weeks
+        return c and -30 <= (c - today).days <= 45
+
+    ranges, singles = [c for c in ranges if ok(c)], [c for c in singles if ok(c)]
+    # Prefer the ad-week range that's still running (latest end within a week), e.g. the Oct 21-27 ad week
+    # over a weekend-only promo on the same page; else an explicit "valid thru"; else whatever we found.
+    current = [c for c in ranges if 0 <= (c - today).days <= 7]
+    if current:
+        return max(current)
+    if singles:
+        return singles[0]
+    return ranges[0] if ranges else None
+
+
+def deal_end(store: str, url: str, text: str) -> tuple:
+    """(ends_at ISO or None, estimated?, already expired?)"""
+    today = local_today()
+    end = parse_end_date(text, url, today)
+    if end:
+        return end.isoformat(), False, end < today
+    wd = STORE_AD_END_WEEKDAY.get(store)
+    if wd is None:
+        return None, False, False
+    return (today + timedelta(days=(wd - today.weekday()) % 7)).isoformat(), True, False
+
+
+def active_q(user_id: str) -> dict:
+    """Mongo filter for a user's deals that haven't ended yet."""
+    return {"user_id": user_id, "$or": [{"ends_at": None}, {"ends_at": {"$gte": local_today().isoformat()}}]}
+
+
 def _collect(item: Item, results, stores: List[str], best: dict, source_kind: str) -> None:
     """Score every highlight in a set of Exa results for one item; keep the best deal per store."""
     for r in results or []:
@@ -505,9 +597,13 @@ def _collect(item: Item, results, stores: List[str], best: dict, source_kind: st
             if not scored:
                 continue
             if store not in best or scored["savings"] > best[store]["savings"]:
+                ends_at, estimated, expired = deal_end(store, url, f"{title} {hl}")
+                if expired:
+                    continue  # the ad says this deal is already over
                 snippet = scored.pop("snippet")
                 best[store] = {**scored, "store": store, "promo_text": snippet, "source_kind": source_kind,
-                               "source_url": url, "source_title": title[:140]}
+                               "source_url": url, "source_title": title[:140],
+                               "ends_at": ends_at, "ends_estimated": estimated}
 
 
 async def search_item(item: Item, user: User) -> list:
@@ -607,7 +703,60 @@ async def run_check(user: User) -> dict:
                                              "message": msg, "action_url": "/"})
         except Exception as e:
             logger.warning(f"Push failed (non-blocking): {e}")
-    return {"checked": len(items), "found": found, "new_alerts": len(new_alerts)}
+    expiring = await run_expiry_reminders(user)
+    return {"checked": len(items), "found": found, "new_alerts": len(new_alerts) + expiring}
+
+
+class ReminderIn(BaseModel):
+    item_id: str
+    store: str
+
+
+async def run_expiry_reminders(user: User) -> int:
+    """Alert once when a deal the shopper asked to be reminded about ends today or tomorrow."""
+    today = local_today()
+    sent: List[Alert] = []
+    async for r in db.reminders.find({"user_id": user.user_id}):
+        doc = await db.deals.find_one({**active_q(user.user_id), "item_id": r["item_id"], "store": r["store"]},
+                                      sort=[("savings", -1)])
+        if not doc or not doc.get("ends_at"):
+            continue
+        deal = Deal.from_mongo(doc)
+        left = (date.fromisoformat(deal.ends_at) - today).days
+        if left > 1:
+            continue
+        key = f"expiry:{deal.item_id}:{deal.store}:{deal.ends_at}"
+        if await db.alerts.find_one({"user_id": user.user_id, "deal_key": key}):
+            continue
+        when = "today" if left <= 0 else "tomorrow"
+        alert = Alert(
+            user_id=user.user_id, deal_key=key,
+            title=f"{deal.item_name} deal {'likely ' if deal.ends_estimated else ''}ends {when} at {deal.store}",
+            message=f"${deal.sale_price:.2f} (usually ${deal.usual_price:.2f}) — grab it before it's gone",
+        )
+        await db.alerts.insert_one(alert.to_mongo())
+        sent.append(alert)
+    if sent:
+        try:
+            title = sent[0].title if len(sent) == 1 else f"{len(sent)} of your deals end soon"
+            await send_push([user.user_id], {"title": title, "message": sent[0].message, "action_url": "/"})
+        except Exception as e:
+            logger.warning(f"Push failed (non-blocking): {e}")
+    return len(sent)
+
+
+@api.post("/reminders")
+async def toggle_reminder(body: ReminderIn, user: User = Depends(current_user)):
+    if not await db.items.find_one({"_id": _oid(body.item_id), "user_id": user.user_id}):
+        raise HTTPException(404, "Item not found")
+    if body.store not in STORES:
+        raise HTTPException(400, "Unknown store")
+    q = {"user_id": user.user_id, "item_id": body.item_id, "store": body.store}
+    if await db.reminders.find_one(q):
+        await db.reminders.delete_one(q)
+        return {"remind": False, "sent": 0}
+    await db.reminders.insert_one({**q, "created_at": now_iso()})
+    return {"remind": True, "sent": await run_expiry_reminders(user)}
 
 
 @api.post("/deals/check")
@@ -622,13 +771,21 @@ async def check_deals(user: User = Depends(current_user)):
 
 @api.get("/deals")
 async def get_deals(user: User = Depends(current_user)):
-    docs = await db.deals.find({"user_id": user.user_id}).sort("pct_off", -1).to_list(300)
-    return [Deal.from_mongo(d).model_dump() for d in docs]
+    docs = await db.deals.find(active_q(user.user_id)).sort("pct_off", -1).to_list(300)
+    reminders = {(r["item_id"], r["store"]) async for r in db.reminders.find({"user_id": user.user_id})}
+    today = local_today()
+    out = []
+    for d in docs:
+        deal = Deal.from_mongo(d)
+        # days_left is computed in store-local time so the app and alerts always agree on "today"/"tomorrow".
+        left = (date.fromisoformat(deal.ends_at) - today).days if deal.ends_at else None
+        out.append({**deal.model_dump(), "remind": (deal.item_id, deal.store) in reminders, "days_left": left})
+    return out
 
 
 @api.get("/savings")
 async def savings(user: User = Depends(current_user)):
-    deals = [Deal.from_mongo(d) for d in await db.deals.find({"user_id": user.user_id}).to_list(300)]
+    deals = [Deal.from_mongo(d) for d in await db.deals.find(active_q(user.user_id)).to_list(300)]
     best: dict = {}
     for d in deals:
         if d.item_id not in best or d.savings > best[d.item_id].savings:
@@ -680,7 +837,7 @@ async def best_store_trip(user: User = Depends(current_user)):
     """Pick the one store that saves the most on the watchlist this week and build its shopping list."""
     items = [Item.from_mongo(d) for d in await db.items.find({"user_id": user.user_id}).to_list(200)]
     deals = [Deal.from_mongo(d) for d in await db.deals.find(
-        {"user_id": user.user_id, "store": {"$in": user.stores}}).to_list(500)]
+        {**active_q(user.user_id), "store": {"$in": user.stores}}).to_list(500)]
     best_at: dict = {}  # (store, item_id) -> best deal
     for d in deals:
         k = (d.store, d.item_id)
@@ -811,7 +968,7 @@ async def daily_check():
     cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     await db.trash.delete_many({"deleted_at": {"$lt": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()}})
     async for doc in db.users.find({"is_demo": True, "created_at": {"$lt": cutoff}}):
-        for coll in (db.items, db.deals, db.alerts, db.users):
+        for coll in (db.items, db.deals, db.alerts, db.reminders, db.users):
             await coll.delete_many({"user_id": doc["user_id"]})
     async for doc in db.users.find({"onboarded": True, "is_demo": {"$ne": True}}):
         user = User.from_mongo(doc)
@@ -822,13 +979,28 @@ async def daily_check():
             logger.warning(f"Daily check failed for {user.user_id}: {e}")
 
 
+async def expiry_reminders_job():
+    # Only shoppers who actually set a reminder need checking.
+    for uid in await db.reminders.distinct("user_id"):
+        doc = await db.users.find_one({"user_id": uid, "onboarded": True})
+        if not doc:
+            continue
+        try:
+            await run_expiry_reminders(User.from_mongo(doc))
+        except Exception as e:
+            logger.warning(f"Expiry reminders failed for {uid}: {e}")
+
+
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("user_id", unique=True)
     await db.items.create_index("user_id")
     await db.deals.create_index([("user_id", 1), ("item_id", 1)])
     await db.alerts.create_index([("user_id", 1), ("deal_key", 1)])
+    await db.reminders.create_index([("user_id", 1), ("item_id", 1), ("store", 1)], unique=True)
     scheduler.add_job(daily_check, "cron", hour=8, minute=0, id="daily_check", replace_existing=True)
+    # Runs after the morning scan, and again in the evening for deals ending tomorrow.
+    scheduler.add_job(expiry_reminders_job, "cron", hour="9,18", minute=0, id="expiry_reminders", replace_existing=True)
     scheduler.start()
 
 

@@ -51,7 +51,7 @@ function PushCard() {
             {state.status === "unsupported"
               ? "Phone alerts work in the installed app. You'll still see in-app alerts here."
               : state.status === "granted"
-                ? "On — we'll notify you when a watched item drops 10%+ or has a BOGO or coupon."
+                ? "On — we'll notify you when a watched item drops 10%+ or has a BOGO or coupon, and before deals you starred end."
                 : blocked
                   ? "Notifications are blocked. Turn them on in Settings to get deal alerts."
                   : "Get a heads-up the moment your regular items go on sale."}
