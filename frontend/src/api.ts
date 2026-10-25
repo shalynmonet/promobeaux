@@ -10,7 +10,8 @@ export type Deal = {
   usual_price: number; sale_price: number; savings: number; pct_off: number;
   promo_type: "sale" | "bogo" | "coupon" | "cashback"; promo_text: string; source_url: string; source_title: string;
   source_kind?: "search" | "weekly_ad";
-  ends_at?: string | null; ends_estimated?: boolean; remind?: boolean; days_left?: number | null;
+  ends_at?: string | null; ends_estimated?: boolean; remind?: boolean; days_left?: number | null; image_url?: string | null;
+  image_pending?: boolean;
   is_sample: boolean; found_at: string;
 };
 export type Savings = {
@@ -52,7 +53,17 @@ function useAuthedQuery<T>(key: string, path: string, refetchInterval?: number) 
 
 export const useMe = () => useAuthedQuery<User>("me", "/me");
 export const useWatchlist = () => useAuthedQuery<Item[]>("watchlist", "/watchlist");
-export const useDeals = () => useAuthedQuery<Deal[]>("deals", "/deals");
+export const useDeals = () => {
+  const api = useApi();
+  const { signedIn } = useSession();
+  return useQuery({
+    queryKey: ["deals"],
+    queryFn: () => api<Deal[]>("/deals"),
+    enabled: signedIn,
+    // Product photos are looked up in the background; poll briefly until they've all been checked.
+    refetchInterval: (q) => (q.state.data?.some((d) => d.image_pending) ? 5000 : false),
+  });
+};
 export const useSavings = () => useAuthedQuery<Savings>("savings", "/savings");
 export const useAlerts = () => useAuthedQuery<AlertItem[]>("alerts", "/alerts", 60000);
 

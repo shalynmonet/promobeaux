@@ -70,7 +70,7 @@ export default function TripScreen() {
         <Txt style={styles.headerTitle}>Best store trip</Txt>
         <View style={{ width: 44 }} />
       </View>
-      <Houndstooth height={10} />
+      <Houndstooth height={24} />
 
       {trip.isLoading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View>

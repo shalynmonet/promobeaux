@@ -84,7 +84,7 @@ export default function AdsScreen() {
           ))}
         </ScrollView>
       </View>
-      <Houndstooth height={10} />
+      <Houndstooth height={24} />
 
       {ads.isLoading || !store ? (
         <View style={styles.center}>

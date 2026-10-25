@@ -111,6 +111,8 @@ class Item(BaseDocument):
     size: str = ""
     usual_price: float
     barcode: str = ""
+    image_url: Optional[str] = None  # product photo from Open Food Facts, when one matches
+    image_checked: bool = False
     created_at: str = Field(default_factory=now_iso)
 
 
@@ -289,6 +291,7 @@ async def add_item(body: ItemIn, user: User = Depends(current_user)):
     item = Item(user_id=user.user_id, **body.model_dump())
     res = await db.items.insert_one(item.to_mongo())
     item.id = str(res.inserted_id)
+    schedule_image_fill(user.user_id)
     return item.model_dump()
 
 
@@ -300,9 +303,11 @@ def _oid(item_id: str) -> ObjectId:
 
 @api.put("/watchlist/{item_id}")
 async def update_item(item_id: str, body: ItemIn, user: User = Depends(current_user)):
-    res = await db.items.update_one({"_id": _oid(item_id), "user_id": user.user_id}, {"$set": body.model_dump()})
+    res = await db.items.update_one({"_id": _oid(item_id), "user_id": user.user_id},
+                                    {"$set": {**body.model_dump(), "image_url": None, "image_checked": False}})
     if not res.matched_count:
         raise HTTPException(404, "Item not found")
+    schedule_image_fill(user.user_id)
     return Item.from_mongo(await db.items.find_one({"_id": _oid(item_id)})).model_dump()
 
 
@@ -335,6 +340,52 @@ async def restore_item(item_id: str, user: User = Depends(current_user)):
         await db.deals.insert_many(keep)
     await db.trash.delete_one({"_id": doc["_id"]})
     return Item.from_mongo(doc["item"]).model_dump()
+
+
+# ---------------------------------------------------------------- product photos (Open Food Facts, no key)
+_image_jobs: set = set()
+
+
+async def lookup_product_image(item: Item) -> Optional[str]:
+    async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": "Promobeaux/1.0"}) as c:
+        if item.barcode:
+            r = await c.get(f"https://world.openfoodfacts.org/api/v2/product/{item.barcode}.json",
+                            params={"fields": "image_front_small_url"})
+            url = ((r.json() or {}).get("product") or {}).get("image_front_small_url")
+            if url:
+                return url
+        r = await c.get("https://world.openfoodfacts.org/cgi/search.pl", params={
+            "search_terms": f"{item.brand} {item.name}".strip(), "search_simple": 1, "action": "process",
+            "json": 1, "page_size": 8, "fields": "product_name,brands,image_front_small_url"})
+        terms = _terms(item.name, 3) + _terms(item.brand, 3)[:1]
+        for p in (r.json() or {}).get("products", []):
+            url, text = p.get("image_front_small_url"), f"{p.get('product_name', '')} {p.get('brands', '')}".lower()
+            # Only accept a photo whose name shares a distinctive word with the item (avoids random products).
+            if url and terms and any(re.search(r"\b" + re.escape(t), text) for t in terms):
+                return url
+    return None
+
+
+async def fill_images(user_id: str) -> None:
+    try:
+        docs = await db.items.find({"user_id": user_id, "image_checked": {"$ne": True}}).to_list(15)
+        for d in docs:
+            item = Item.from_mongo(d)
+            try:
+                url = await lookup_product_image(item)
+            except Exception as e:
+                logger.info(f"Image lookup failed for {item.name}: {e}")
+                url = None  # treat as "no photo" so the app stops waiting; editing the item retries
+            await db.items.update_one({"_id": d["_id"]}, {"$set": {"image_url": url, "image_checked": True}})
+    finally:
+        _image_jobs.discard(user_id)
+
+
+def schedule_image_fill(user_id: str) -> None:
+    """Look up missing product photos in the background (one job per user at a time)."""
+    if user_id not in _image_jobs:
+        _image_jobs.add(user_id)
+        asyncio.create_task(fill_images(user_id))
 
 
 @api.get("/barcode/{code}")
@@ -773,13 +824,19 @@ async def check_deals(user: User = Depends(current_user)):
 async def get_deals(user: User = Depends(current_user)):
     docs = await db.deals.find(active_q(user.user_id)).sort("pct_off", -1).to_list(300)
     reminders = {(r["item_id"], r["store"]) async for r in db.reminders.find({"user_id": user.user_id})}
+    items = {str(i["_id"]): i async for i in db.items.find({"user_id": user.user_id}, {"image_url": 1, "image_checked": 1})}
+    if any(not i.get("image_checked") for i in items.values()):
+        schedule_image_fill(user.user_id)
     today = local_today()
     out = []
     for d in docs:
         deal = Deal.from_mongo(d)
         # days_left is computed in store-local time so the app and alerts always agree on "today"/"tomorrow".
         left = (date.fromisoformat(deal.ends_at) - today).days if deal.ends_at else None
-        out.append({**deal.model_dump(), "remind": (deal.item_id, deal.store) in reminders, "days_left": left})
+        item_doc = items.get(deal.item_id) or {}
+        out.append({**deal.model_dump(), "remind": (deal.item_id, deal.store) in reminders, "days_left": left,
+                    "image_url": item_doc.get("image_url"),
+                    "image_pending": bool(item_doc) and not item_doc.get("image_checked")})
     return out
 
 

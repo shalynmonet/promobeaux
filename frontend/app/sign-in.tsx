@@ -179,7 +179,7 @@ const useStyles = makeStyles((c) => ({
   heroImg: { ...{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 } },
   heroFade: { position: "absolute", left: 0, right: 0, bottom: 0, height: 140 },
   content: { paddingHorizontal: spacing.xl, gap: spacing.md, marginTop: -spacing.xl },
-  wordmark: { width: 230, height: 84, alignSelf: "center" },
+  wordmark: { width: 240, height: 101, alignSelf: "center" },
   headline: { fontSize: 30, lineHeight: 38, letterSpacing: -0.6 },
   sub: { fontSize: 15, lineHeight: 22, color: c.muted, marginBottom: spacing.sm },
   segment: { flexDirection: "row", backgroundColor: c.surfaceTertiary, borderRadius: radius.pill, padding: 4 },

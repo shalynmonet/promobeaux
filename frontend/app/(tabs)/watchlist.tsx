@@ -79,7 +79,7 @@ export default function WatchlistScreen() {
         <Txt style={styles.kicker}>{list.data?.length ?? 0} items tracked</Txt>
         <Txt style={styles.title}>Your watchlist</Txt>
       </View>
-      <Houndstooth height={10} testID="watchlist-header-houndstooth" />
+      <Houndstooth height={24} testID="watchlist-header-houndstooth" />
       {list.isLoading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View>
       ) : list.error ? (

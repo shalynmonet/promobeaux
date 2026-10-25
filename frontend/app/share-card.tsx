@@ -83,7 +83,7 @@ export default function ShareCard() {
           <Txt style={styles.footer} numberOfLines={2}>
             {s?.deal_count ?? 0} deals found at {stores.slice(0, 3).join(" · ") || "my stores"}
           </Txt>
-          <Houndstooth height={16} style={styles.band} testID="share-card-houndstooth" />
+          <Houndstooth height={24} style={styles.band} testID="share-card-houndstooth" />
         </View>
       </View>
 
@@ -109,7 +109,7 @@ const useStyles = makeStyles((c) => ({
   blobB: { width: 140, height: 140, bottom: -50, left: -40, opacity: 0.45 },
   // Logo artwork sits on its own light background, so show it on a light pill.
   brandRow: { alignSelf: "center", backgroundColor: c.surface, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, marginBottom: spacing.lg },
-  wordmark: { width: 140, height: 51 },
+  wordmark: { width: 150, height: 63 },
   kicker: { color: c.onBrandPrimary, fontSize: 18, opacity: 0.9 },
   amount: { color: c.onBrandPrimary, fontSize: 76, lineHeight: 88, letterSpacing: -3 },
   wins: { marginTop: spacing.lg, gap: spacing.xs, backgroundColor: c.brandSecondary, borderRadius: radius.md, padding: spacing.md },

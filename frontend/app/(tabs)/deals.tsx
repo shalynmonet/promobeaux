@@ -57,43 +57,54 @@ function DealCard({ deal, index }: { deal: Deal; index: number }) {
   return (
     <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 60).springify().damping(18)}>
       <PressScale testID={`deal-card-${deal.id}`} onPress={open} style={styles.card}>
-        <View style={[styles.tile, index % 3 === 1 && styles.tileTall]}>
-          <View style={styles.badge}>
-            <Txt medium testID={`deal-badge-${deal.id}`} style={styles.badgeText}>{badgeText(deal)}</Txt>
+        <View style={styles.tile}>
+          <View style={styles.tileText}>
+            <View style={styles.badge}>
+              <Txt medium testID={`deal-badge-${deal.id}`} style={styles.badgeText}>{badgeText(deal)}</Txt>
+            </View>
+            <Txt style={styles.promoType}>
+              {PROMO_LABEL[deal.promo_type]}
+              {deal.source_kind === "weekly_ad" ? " · Weekly ad" : ""}
+            </Txt>
           </View>
-          <Txt style={styles.promoType}>
-            {PROMO_LABEL[deal.promo_type]}
-            {deal.source_kind === "weekly_ad" ? " · Weekly ad" : ""}
-          </Txt>
-          <Pressable
-            testID={`deal-remind-${deal.id}`}
-            onPress={remind}
-            disabled={toggle.isPending}
-            style={[styles.remindBtn, deal.remind && styles.remindOn]}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: !!deal.remind }}
-            aria-checked={!!deal.remind}
-            accessibilityLabel={deal.remind ? "Reminder on" : "Remind me before it ends"}
-          >
-            {deal.remind ? (
-              <BellRinging size={18} color={colors.onBrandPrimary} weight="fill" />
-            ) : (
-              <BellSimple size={18} color={colors.brandSecondary} />
-            )}
-          </Pressable>
-          <Houndstooth height={8} style={styles.tileBand} />
+          {deal.image_url ? (
+            <View style={styles.photoWrap}>
+              <Image testID={`deal-image-${deal.id}`} source={{ uri: deal.image_url }} style={styles.photo} contentFit="contain" transition={250} accessibilityLabel={deal.item_name} />
+            </View>
+          ) : null}
+          <Houndstooth height={24} style={styles.tileBand} />
         </View>
         <View style={styles.cardBody}>
-          <Txt medium style={styles.name} numberOfLines={2}>{deal.item_name}</Txt>
-          {!!(deal.brand || deal.size) && (
-            <Txt style={styles.meta} numberOfLines={1}>{[deal.brand, deal.size].filter(Boolean).join(" · ")}</Txt>
-          )}
+          <View style={styles.nameRow}>
+            <View style={{ flex: 1 }}>
+              <Txt medium style={styles.name} numberOfLines={1}>{deal.item_name}</Txt>
+              {!!(deal.brand || deal.size) && (
+                <Txt style={styles.meta} numberOfLines={1}>{[deal.brand, deal.size].filter(Boolean).join(" · ")}</Txt>
+              )}
+            </View>
+            <Pressable
+              testID={`deal-remind-${deal.id}`}
+              onPress={remind}
+              disabled={toggle.isPending}
+              style={[styles.remindBtn, deal.remind && styles.remindOn]}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: !!deal.remind }}
+              aria-checked={!!deal.remind}
+              accessibilityLabel={deal.remind ? "Reminder on" : "Remind me before it ends"}
+            >
+              {deal.remind ? (
+                <BellRinging size={18} color={colors.onBrandPrimary} weight="fill" />
+              ) : (
+                <BellSimple size={18} color={colors.brandSecondary} />
+              )}
+            </Pressable>
+          </View>
           <View style={styles.priceRow}>
             <Txt medium style={styles.price}>{money(deal.sale_price)}</Txt>
             <Txt style={styles.was}>{money(deal.usual_price)}</Txt>
+            <Txt medium style={styles.save}>Save {money(deal.savings)}</Txt>
           </View>
-          <Txt medium style={styles.save}>Save {money(deal.savings)}</Txt>
-          {!!deal.promo_text && <Txt style={styles.promo} numberOfLines={3}>{deal.promo_text}</Txt>}
+          {!!deal.promo_text && <Txt style={styles.promo} numberOfLines={2}>{deal.promo_text}</Txt>}
           <View style={[styles.expiryPill, expiry?.urgent && styles.expiryUrgent]}>
             <Clock size={13} color={expiry?.urgent ? colors.onSurface : colors.muted} weight={expiry?.urgent ? "fill" : "regular"} />
             <Txt testID={`deal-expiry-${deal.id}`} style={[styles.expiryText, expiry?.urgent && styles.expiryTextUrgent]} numberOfLines={1}>
@@ -142,7 +153,6 @@ export default function DealsScreen() {
   const total = Object.values(
     filtered.reduce<Record<string, number>>((acc, d) => ({ ...acc, [d.item_id]: Math.max(acc[d.item_id] ?? 0, d.savings) }), {}),
   ).reduce((s, v) => s + v, 0);
-  const cols = [filtered.filter((_, i) => i % 2 === 0), filtered.filter((_, i) => i % 2 === 1)];
   const chips = ["All", ENDING_SOON, ...(me.data?.stores ?? [])];
 
   return (
@@ -165,7 +175,7 @@ export default function DealsScreen() {
           ))}
         </ScrollView>
       </View>
-      <Houndstooth height={10} testID="deals-header-houndstooth" />
+      <Houndstooth height={24} testID="deals-header-houndstooth" />
 
       {deals.isLoading ? (
         <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} size="large" /></View>
@@ -190,12 +200,8 @@ export default function DealsScreen() {
               </Txt>
             </View>
           ) : (
-            <View style={styles.masonry}>
-              {cols.map((col, ci) => (
-                <View key={ci} style={styles.col}>
-                  {col.map((d, i) => <DealCard key={d.id} deal={d} index={i * 2 + ci} />)}
-                </View>
-              ))}
+            <View style={styles.list}>
+              {filtered.map((d, i) => <DealCard key={d.id} deal={d} index={i} />)}
             </View>
           )}
         </ScrollView>
@@ -218,31 +224,34 @@ const useStyles = makeStyles((c) => ({
   chipRow: { height: 56, flexGrow: 0, marginHorizontal: -spacing.lg },
   chipContent: { gap: spacing.sm, paddingHorizontal: spacing.lg, alignItems: "center" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.lg, padding: spacing.xl },
-  masonry: { flexDirection: "row", gap: spacing.md },
-  col: { flex: 1, gap: spacing.md },
+  list: { gap: spacing.md },
   card: {
     backgroundColor: c.surfaceSecondary, borderRadius: radius.lg, overflow: "hidden", borderWidth: 1, borderColor: c.border,
     shadowColor: c.shadow, shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2,
   },
-  tile: { height: 88, backgroundColor: c.brandTertiary, padding: spacing.md, justifyContent: "space-between" },
-  tileTall: { height: 112 },
+  // Green tile: discount badge on the left, product photo on the right, houndstooth band along the bottom.
+  tile: { height: 132, backgroundColor: c.brandTertiary, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 24 + spacing.sm, flexDirection: "row", alignItems: "center", gap: spacing.md },
+  tileText: { flex: 1, gap: spacing.sm },
+  photoWrap: { width: 84, height: 84, borderRadius: radius.md, backgroundColor: c.surfaceSecondary, padding: spacing.xs, alignItems: "center", justifyContent: "center" },
+  photo: { width: "100%", height: "100%" },
   tileBand: { position: "absolute", left: 0, right: 0, bottom: 0 },
   badge: { alignSelf: "flex-start", backgroundColor: c.brandPrimary, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   badgeText: { color: c.onBrandPrimary, fontSize: 16 },
   promoType: { color: c.onBrandTertiary, fontSize: 12 },
-  cardBody: { padding: spacing.md, gap: spacing.xs },
-  name: { fontSize: 15, lineHeight: 20 },
+  cardBody: { padding: spacing.lg, gap: spacing.xs },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  name: { fontSize: 17, lineHeight: 22 },
   meta: { fontSize: 12, color: c.muted },
   priceRow: { flexDirection: "row", alignItems: "baseline", gap: spacing.sm, marginTop: spacing.xs },
   price: { fontSize: 22, letterSpacing: -0.4 },
   was: { fontSize: 13, color: c.muted, textDecorationLine: "line-through" },
-  save: { fontSize: 13, color: c.brandSecondary },
+  save: { fontSize: 14, color: c.brandSecondary, marginLeft: "auto" },
   promo: { fontSize: 12, color: c.muted, lineHeight: 17 },
   expiryPill: { alignSelf: "flex-start", maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 4, marginTop: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: c.surfaceTertiary },
   expiryUrgent: { backgroundColor: c.warning },
   expiryText: { flexShrink: 1, fontSize: 12, color: c.muted },
   expiryTextUrgent: { color: c.onSurface },
-  remindBtn: { position: "absolute", top: spacing.xs, right: spacing.xs, width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: c.surfaceSecondary },
+  remindBtn: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: c.brandTertiary },
   remindOn: { backgroundColor: c.brandPrimary },
   footer: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: c.divider },
   store: { flex: 1, fontSize: 13 },

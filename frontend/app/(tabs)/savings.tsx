@@ -61,7 +61,7 @@ export default function SavingsScreen() {
                 <Txt medium style={styles.shareText}>Share my savings</Txt>
               </Pressable>
             )}
-            <Houndstooth height={12} style={styles.heroBand} testID="savings-hero-houndstooth" />
+            <Houndstooth height={24} style={styles.heroBand} testID="savings-hero-houndstooth" />
           </Animated.View>
 
           {trip.data?.store && (

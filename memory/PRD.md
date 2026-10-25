@@ -44,6 +44,11 @@ Clerk keys provided · Exa key provided · push + in-app banners · daily check 
 - Houndstooth brand accents (src/components/houndstooth.tsx, SVG pattern from theme ink/paper colors): under the headers on Deals, Watchlist, Ads and Trip; along the bottom of deal-card tiles, the Savings hero and the share card. Store badges are now black with white letters. Green stays the action/accent color.
 - Sharp icon: done (2026-10-25) from the user's 1643px cart original (assets/images/brand/cart-original.jpg). icon.png = the whole artwork downscaled to 1024; adaptive-icon.png = the art at 64% with feathered edges on #EBEAEF (matches the photo's background). The splash still uses the earlier small wordmark logo.
 
+## Iteration 7 (2026-10-25)
+- High-res logos from the user: sign-in and share-card wordmark (920px, transparent background, centered); splash = full square logo with the name (bg #EDEFF2).
+- Houndstooth bands now repeat a seamless tile cut from the user's ink-on-sage strip artwork (assets/images/houndstooth-tile@1x/2x/3x.png), 16pt tall everywhere.
+- Deals: single-column cards. The green tile holds the discount badge plus the product photo (Open Food Facts lookup by barcode or name+brand, kept only if the name matches; filled in the background and stored as item.image_url), with the houndstooth band along its bottom. Name, price, savings and bell are on one row; the promo text is limited to 2 lines.
+
 ## Backlog
 - P1: Confirm before deleting an item (or offer undo); stricter brand+product matching (e.g. Tyson nuggets vs breast).
 - P1: Price history per item; shopping list for the best store this week.
